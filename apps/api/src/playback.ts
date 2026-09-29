@@ -66,8 +66,8 @@ export async function playbackRoutes(app: FastifyInstance) {
       const session = (
         await db.query(
           `INSERT INTO playback_sessions(
-             video_id,expires_at,last_seen_at,device_type,browser,os
-           ) VALUES($1,now()+$2*interval '1 second',now(),$3,$4,$5)
+             video_id,expires_at,device_type,browser,os
+           ) VALUES($1,now()+$2*interval '1 second',$3,$4,$5)
            RETURNING id`,
           [
             v.id,
@@ -315,6 +315,7 @@ export async function playbackRoutes(app: FastifyInstance) {
            )
            SELECT
              e.*,
+             e.unique_viewers AS playback_sessions,
              CASE WHEN e.unique_viewers=0 THEN 0
                ELSE round((e.completions::numeric/e.unique_viewers)*100,2)
              END AS completion_rate,
@@ -345,7 +346,7 @@ export async function playbackRoutes(app: FastifyInstance) {
       await videoAccess(req, req.params.id, "viewer", "analytics:read");
       const active = await db.query(
         `SELECT
-           count(*) AS active_viewers,
+           coalesce(sum(count),0) AS active_viewers,
            jsonb_object_agg(quality,count) FILTER(WHERE quality IS NOT NULL) AS qualities
          FROM (
            SELECT COALESCE(current_quality,'auto') AS quality,count(*) AS count
