@@ -240,8 +240,8 @@ export async function playbackRoutes(app: FastifyInstance) {
              CASE
                WHEN unique_viewers=0 OR coalesce((v.metadata->>'duration')::double precision,0)=0 THEN 0
                ELSE least(
-                 1,
-                 watch_seconds::double precision /
+                 100,
+                 100 * watch_seconds::double precision /
                  (unique_viewers * (v.metadata->>'duration')::double precision)
                )
              END AS average_watch_percentage
@@ -252,6 +252,7 @@ export async function playbackRoutes(app: FastifyInstance) {
       ).rows[0];
       return summary;
     },
+  );
   app.get<{ Params: { id: string } }>(
     "/api/v1/videos/:id/analytics/realtime",
     async (req) => {
