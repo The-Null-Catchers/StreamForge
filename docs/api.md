@@ -95,6 +95,7 @@ Every referenced video must be active and belong to the playlist workspace. Dupl
 - `GET /api/v1/videos/:id/versions`
 - `POST /api/v1/videos/:id/versions`
 - `PUT /api/v1/videos/:id/versions/:versionId/activate`
+- `DELETE /api/v1/videos/:id/versions/:versionId`
 
 Creating a version snapshots a processed replacement video's storage pointers and media metadata into the logical video's version history. The current asset is preserved as the initial version before the first replacement. Replacement media must be ready and belong to the same workspace.
 
@@ -105,7 +106,7 @@ Creating a version snapshots a processed replacement video's storage pointers an
 }
 ```
 
-Activating a version switches the logical video's playback asset pointers back to that snapshot without changing the logical video ID.
+Activating a version switches the logical video's playback asset pointers back to that snapshot without changing the logical video ID. Inactive versions can be removed. A source video cannot be deleted while another video's version history still references its media, preventing broken playback pointers.
 
 ## Review workflow
 
