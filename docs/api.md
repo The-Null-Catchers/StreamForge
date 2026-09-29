@@ -51,3 +51,40 @@ Unlisted links must first be minted by an authorized member/key, then the bearer
 ## Analytics
 
 Playback events carry `{id,token,event,position,watchSeconds?}`. IDs are client-generated UUIDs and deduplicated. Heartbeats contribute at most 15 seconds per event; other events contribute zero watch time. Heartbeats are sent every ten seconds while playing. Paused/buffering/seeking time is excluded on a best-effort client basis. Plays count play events, including resumed plays; completions count ended events. No unique-person claim is made.
+
+
+## Chapters
+
+`GET /api/v1/videos/:id/chapters` returns chapters ordered by timestamp.
+
+`PUT /api/v1/videos/:id/chapters` atomically replaces the chapter list. Requires editor access or a `videos:write` API key.
+
+```json
+{
+  "chapters": [
+    { "startSeconds": 0, "title": "Introduction" },
+    { "startSeconds": 134, "title": "Setup" }
+  ]
+}
+```
+
+Duplicate timestamps are rejected.
+
+## Playlists
+
+- `GET /api/v1/playlists?workspaceId=...`
+- `POST /api/v1/playlists`
+- `GET /api/v1/playlists/:id`
+- `PATCH /api/v1/playlists/:id`
+- `PUT /api/v1/playlists/:id/items`
+- `DELETE /api/v1/playlists/:id`
+
+Ordered playlist membership is replaced atomically:
+
+```json
+{
+  "videoIds": ["video-uuid-1", "video-uuid-2"]
+}
+```
+
+Every referenced video must be active and belong to the playlist workspace. Duplicate video IDs are rejected. Playlist deletion never deletes videos.

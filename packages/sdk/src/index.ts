@@ -12,6 +12,20 @@ export type Upload = {
   uploaded_bytes: string;
   parts?: { part_number: number; checksum: string }[];
 };
+export type Chapter = {
+  id?: string;
+  start_seconds?: number;
+  startSeconds?: number;
+  title: string;
+};
+export type Playlist = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  created_at: string;
+  item_count?: number;
+  items?: Array<Video & { position: number }>;
+};
 export class StreamForge {
   constructor(private options: { apiKey: string; baseUrl?: string }) {}
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -46,6 +60,42 @@ export class StreamForge {
       this.request<Video>(`/videos/${encodeURIComponent(id)}`),
     delete: (id: string) =>
       this.request(`/videos/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    chapters: {
+      list: (id: string) =>
+        this.request<Chapter[]>(`/videos/${encodeURIComponent(id)}/chapters`),
+      replace: (id: string, chapters: Array<{ startSeconds: number; title: string }>) =>
+        this.request(`/videos/${encodeURIComponent(id)}/chapters`, {
+          method: "PUT",
+          body: JSON.stringify({ chapters }),
+        }),
+    },
+  };
+  playlists = {
+    list: (workspaceId: string) =>
+      this.request<Playlist[]>(
+        `/playlists?workspaceId=${encodeURIComponent(workspaceId)}`,
+      ),
+    create: (input: { workspaceId: string; name: string }) =>
+      this.request<Playlist>("/playlists", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    get: (id: string) =>
+      this.request<Playlist>(`/playlists/${encodeURIComponent(id)}`),
+    rename: (id: string, name: string) =>
+      this.request(`/playlists/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      }),
+    replaceItems: (id: string, videoIds: string[]) =>
+      this.request(`/playlists/${encodeURIComponent(id)}/items`, {
+        method: "PUT",
+        body: JSON.stringify({ videoIds }),
+      }),
+    delete: (id: string) =>
+      this.request(`/playlists/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      }),
   };
   uploads = {
     create: (input: {

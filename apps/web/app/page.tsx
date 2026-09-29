@@ -78,6 +78,8 @@ export default function Dashboard() {
   const [hooks, setHooks] = useState<any[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [chapters, setChapters] = useState<any[]>([]);
+  const [playlists, setPlaylists] = useState<any[]>([]);
   useEffect(() => {
     setAuthenticated(!!session());
     const q = new URLSearchParams(location.search);
@@ -181,6 +183,15 @@ export default function Dashboard() {
     else setAnalytics(null);
   }, [selected?.id, selected?.status]);
   useEffect(() => {
+    if (!selected) {
+      setChapters([]);
+      return;
+    }
+    void api(`/videos/${selected.id}/chapters`)
+      .then(setChapters)
+      .catch((e) => setNotice(e.message));
+  }, [selected?.id]);
+  useEffect(() => {
     if (!workspace) return;
     if (section === "keys")
       void api(`/api-keys?workspaceId=${workspace}`)
@@ -189,6 +200,10 @@ export default function Dashboard() {
     if (section === "webhooks")
       void api(`/webhooks?workspaceId=${workspace}`)
         .then(setHooks)
+        .catch((e) => setNotice(e.message));
+    if (section === "playlists")
+      void api(`/playlists?workspaceId=${workspace}`)
+        .then(setPlaylists)
         .catch((e) => setNotice(e.message));
   }, [section, workspace]);
   async function authSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -414,6 +429,7 @@ export default function Dashboard() {
           {[
             { id: "library", label: "Video library", icon: Film },
             { id: "activity", label: "Activity", icon: ChartNoAxesCombined },
+            { id: "playlists", label: "Playlists", icon: FolderOpen },
             { id: "keys", label: "API keys", icon: KeyRound },
             { id: "webhooks", label: "Webhooks", icon: Webhook },
             { id: "settings", label: "Workspace", icon: Settings },
@@ -667,6 +683,84 @@ export default function Dashboard() {
                   />
                   <input name="file" type="file" accept=".srt,.vtt" required />
                   <button>Upload subtitles</button>
+                </form>
+              </section>
+              <section className="panel">
+                <h3>Chapters</h3>
+                {chapters.length ? (
+                  chapters.map((chapter, index) => (
+                    <div className="resource-row" key={chapter.id ?? `${chapter.start_seconds}-${index}`}>
+                      <div>
+                        <strong>{time(Number(chapter.start_seconds))}</strong>
+                        <p>{chapter.title}</p>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          const next = chapters.filter((_, i) => i !== index);
+                          try {
+                            await api(`/videos/${selected.id}/chapters`, {
+                              method: "PUT",
+                              body: JSON.stringify({
+                                chapters: next.map((item) => ({
+                                  startSeconds: Number(item.start_seconds),
+                                  title: item.title,
+                                })),
+                              }),
+                            });
+                            setChapters(next);
+                          } catch (err) {
+                            setNotice((err as Error).message);
+                          }
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <p>No chapters yet. Add timestamps to make long videos easier to navigate.</p>
+                )}
+                <form
+                  className="inline-form"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const form = new FormData(e.currentTarget);
+                    const startSeconds = Number(form.get("startSeconds"));
+                    const title = String(form.get("title") ?? "").trim();
+                    const next = [
+                      ...chapters.map((item) => ({
+                        start_seconds: Number(item.start_seconds),
+                        title: item.title,
+                      })),
+                      { start_seconds: startSeconds, title },
+                    ].sort((a, b) => a.start_seconds - b.start_seconds);
+                    try {
+                      await api(`/videos/${selected.id}/chapters`, {
+                        method: "PUT",
+                        body: JSON.stringify({
+                          chapters: next.map((item) => ({
+                            startSeconds: item.start_seconds,
+                            title: item.title,
+                          })),
+                        }),
+                      });
+                      setChapters(next);
+                      e.currentTarget.reset();
+                    } catch (err) {
+                      setNotice((err as Error).message);
+                    }
+                  }}
+                >
+                  <input
+                    name="startSeconds"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    placeholder="Start (seconds)"
+                    required
+                  />
+                  <input name="title" maxLength={200} placeholder="Chapter title" required />
+                  <button>Add chapter</button>
                 </form>
               </section>
               <button
@@ -949,6 +1043,67 @@ export default function Dashboard() {
                 Built for every frame.
                 <span>StreamForge · Media infrastructure</span>
               </footer>
+            </>
+          ) : section === "playlists" ? (
+            <>
+              <div className="page-heading">
+                <div>
+                  <div className="eyebrow">ORGANIZE YOUR LIBRARY</div>
+                  <h1>Playlists</h1>
+                  <p>Create ordered collections for delivery, review, or curation.</p>
+                </div>
+              </div>
+              <form
+                className="panel inline-form"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = new FormData(e.currentTarget);
+                  try {
+                    await post("/playlists", {
+                      workspaceId: workspace,
+                      name: form.get("name"),
+                    });
+                    setPlaylists(await api(`/playlists?workspaceId=${workspace}`));
+                    e.currentTarget.reset();
+                  } catch (err) {
+                    setNotice((err as Error).message);
+                  }
+                }}
+              >
+                <input name="name" maxLength={200} placeholder="Playlist name" required />
+                <button className="primary">Create playlist</button>
+              </form>
+              {playlists.length ? (
+                playlists.map((playlist) => (
+                  <div className="resource-row" key={playlist.id}>
+                    <FolderOpen />
+                    <div>
+                      <strong>{playlist.name}</strong>
+                      <p>{playlist.item_count} video{Number(playlist.item_count) === 1 ? "" : "s"}</p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`Delete playlist “${playlist.name}”? Videos will not be deleted.`))
+                          return;
+                        try {
+                          await api(`/playlists/${playlist.id}`, { method: "DELETE" });
+                          setPlaylists(await api(`/playlists?workspaceId=${workspace}`));
+                        } catch (err) {
+                          setNotice((err as Error).message);
+                        }
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="empty">
+                  <FolderOpen size={36} />
+                  <h2>No playlists yet</h2>
+                  <p>Create one here, then manage its ordered video IDs through the API or SDK.</p>
+                </div>
+              )}
             </>
           ) : section === "keys" ? (
             <>
