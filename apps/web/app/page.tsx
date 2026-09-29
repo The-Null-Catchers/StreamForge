@@ -88,6 +88,7 @@ export default function Dashboard() {
   const [draggedPlaylistVideoId, setDraggedPlaylistVideoId] = useState<string | null>(null);
   const [versions, setVersions] = useState<any[]>([]);
   const [reviewComments, setReviewComments] = useState<any[]>([]);
+  const [transcriptResults, setTranscriptResults] = useState<any[]>([]);
   useEffect(() => {
     setAuthenticated(!!session());
     const q = new URLSearchParams(location.search);
@@ -203,6 +204,7 @@ export default function Dashboard() {
     if (!selected) {
       setVersions([]);
       setReviewComments([]);
+      setTranscriptResults([]);
       return;
     }
     void Promise.all([
@@ -720,6 +722,50 @@ export default function Dashboard() {
                   <input name="file" type="file" accept=".srt,.vtt" required />
                   <button>Upload subtitles</button>
                 </form>
+              </section>
+              <section className="panel">
+                <h3>Search transcript</h3>
+                <p>
+                  Uploaded SRT/WebVTT tracks are indexed as timestamped transcript
+                  text. Search works without an AI provider.
+                </p>
+                <form
+                  className="inline-form"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const form = new FormData(e.currentTarget);
+                    const query = String(form.get("query") ?? "").trim();
+                    try {
+                      const result = await api(
+                        `/videos/${selected.id}/transcript?search=${encodeURIComponent(query)}&limit=100`,
+                      );
+                      setTranscriptResults(result.items);
+                    } catch (err) {
+                      setNotice((err as Error).message);
+                    }
+                  }}
+                >
+                  <input
+                    name="query"
+                    maxLength={200}
+                    placeholder="Search transcript…"
+                  />
+                  <button>Search</button>
+                </form>
+                {transcriptResults.length ? (
+                  transcriptResults.map((segment) => (
+                    <div className="resource-row" key={segment.id}>
+                      <div>
+                        <strong>
+                          {time(Number(segment.start_seconds))} · {segment.language}
+                        </strong>
+                        <p>{segment.text}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p>No transcript results loaded yet.</p>
+                )}
               </section>
               <section className="panel">
                 <h3>Chapters</h3>
