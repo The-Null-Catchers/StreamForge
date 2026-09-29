@@ -287,7 +287,7 @@ test(
         "POST",
         {
           parentId: reviewComment.body.id,
-          versionId: versionCreate.body.id,
+          versionId: baseline.id,
           timestampSeconds: 2.5,
           body: "Updated in the next cut.",
         },
