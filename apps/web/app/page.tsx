@@ -62,6 +62,7 @@ export default function Dashboard() {
   const [status, setStatus] = useState("");
   const [offset, setOffset] = useState(0);
   useEffect(() => setOffset(0), [workspace, search, status]);
+  useEffect(() => setPlaylistDetail(null), [workspace]);
   const [selected, setSelected] = useState<Video | null>(null);
   const [usage, setUsage] = useState({
     source_bytes: 0,
@@ -82,6 +83,9 @@ export default function Dashboard() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [chapters, setChapters] = useState<any[]>([]);
   const [playlists, setPlaylists] = useState<any[]>([]);
+  const [playlistDetail, setPlaylistDetail] = useState<any | null>(null);
+  const [playlistCandidates, setPlaylistCandidates] = useState<Video[]>([]);
+  const [draggedPlaylistVideoId, setDraggedPlaylistVideoId] = useState<string | null>(null);
   const [versions, setVersions] = useState<any[]>([]);
   const [reviewComments, setReviewComments] = useState<any[]>([]);
   useEffect(() => {
@@ -226,6 +230,17 @@ export default function Dashboard() {
         .then(setPlaylists)
         .catch((e) => setNotice(e.message));
   }, [section, workspace]);
+  async function savePlaylistItems(nextItems: any[]) {
+    if (!playlistDetail) return;
+    await api(`/playlists/${playlistDetail.id}/items`, {
+      method: "PUT",
+      body: JSON.stringify({ videoIds: nextItems.map((item) => item.id) }),
+    });
+    const refreshed = await api(`/playlists/${playlistDetail.id}`);
+    setPlaylistDetail(refreshed);
+    setPlaylists(await api(`/playlists?workspaceId=${workspace}`));
+  }
+
   async function authSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
@@ -460,6 +475,7 @@ export default function Dashboard() {
               onClick={() => {
                 setSection(item.id);
                 setSelected(null);
+                setPlaylistDetail(null);
               }}
             >
               <item.icon size={18} />
@@ -1280,63 +1296,303 @@ export default function Dashboard() {
             </>
           ) : section === "playlists" ? (
             <>
-              <div className="page-heading">
-                <div>
-                  <div className="eyebrow">ORGANIZE YOUR LIBRARY</div>
-                  <h1>Playlists</h1>
-                  <p>Create ordered collections for delivery, review, or curation.</p>
-                </div>
-              </div>
-              <form
-                className="panel inline-form"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const form = new FormData(e.currentTarget);
-                  try {
-                    await post("/playlists", {
-                      workspaceId: workspace,
-                      name: form.get("name"),
-                    });
-                    setPlaylists(await api(`/playlists?workspaceId=${workspace}`));
-                    e.currentTarget.reset();
-                  } catch (err) {
-                    setNotice((err as Error).message);
-                  }
-                }}
-              >
-                <input name="name" maxLength={200} placeholder="Playlist name" required />
-                <button className="primary">Create playlist</button>
-              </form>
-              {playlists.length ? (
-                playlists.map((playlist) => (
-                  <div className="resource-row" key={playlist.id}>
-                    <FolderOpen />
+              {playlistDetail ? (
+                <>
+                  <button className="back" onClick={() => setPlaylistDetail(null)}>
+                    ← Back to playlists
+                  </button>
+                  <div className="page-heading">
                     <div>
-                      <strong>{playlist.name}</strong>
-                      <p>{playlist.item_count} video{Number(playlist.item_count) === 1 ? "" : "s"}</p>
+                      <div className="eyebrow">ORDERED COLLECTION</div>
+                      <h1>{playlistDetail.name}</h1>
+                      <p>
+                        {playlistDetail.items.length} video
+                        {playlistDetail.items.length === 1 ? "" : "s"} · drag to reorder
+                        or use the move buttons.
+                      </p>
                     </div>
-                    <button
-                      onClick={async () => {
-                        if (!confirm(`Delete playlist “${playlist.name}”? Videos will not be deleted.`))
-                          return;
+                  </div>
+
+                  <form
+                    className="panel inline-form"
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const form = new FormData(e.currentTarget);
+                      const name = String(form.get("name") ?? "").trim();
+                      try {
+                        await api(`/playlists/${playlistDetail.id}`, {
+                          method: "PATCH",
+                          body: JSON.stringify({ name }),
+                        });
+                        setPlaylistDetail({ ...playlistDetail, name });
+                        setPlaylists(
+                          await api(`/playlists?workspaceId=${workspace}`),
+                        );
+                      } catch (err) {
+                        setNotice((err as Error).message);
+                      }
+                    }}
+                  >
+                    <input
+                      name="name"
+                      maxLength={200}
+                      defaultValue={playlistDetail.name}
+                      required
+                    />
+                    <button>Rename playlist</button>
+                  </form>
+
+                  <section className="panel">
+                    <h3>Playlist order</h3>
+                    {playlistDetail.items.length ? (
+                      playlistDetail.items.map((item: any, index: number) => (
+                        <div
+                          className="resource-row"
+                          key={item.id}
+                          draggable
+                          onDragStart={() => setDraggedPlaylistVideoId(item.id)}
+                          onDragEnd={() => setDraggedPlaylistVideoId(null)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={async (e) => {
+                            e.preventDefault();
+                            if (
+                              !draggedPlaylistVideoId ||
+                              draggedPlaylistVideoId === item.id
+                            )
+                              return;
+                            const next = [...playlistDetail.items];
+                            const from = next.findIndex(
+                              (video: any) => video.id === draggedPlaylistVideoId,
+                            );
+                            const to = next.findIndex(
+                              (video: any) => video.id === item.id,
+                            );
+                            if (from < 0 || to < 0) return;
+                            const [moved] = next.splice(from, 1);
+                            next.splice(to, 0, moved);
+                            try {
+                              await savePlaylistItems(next);
+                            } catch (err) {
+                              setNotice((err as Error).message);
+                            }
+                          }}
+                        >
+                          <div>
+                            <strong>
+                              {index + 1}. {item.title}
+                            </strong>
+                            <p>
+                              {item.metadata?.duration
+                                ? time(Number(item.metadata.duration))
+                                : "Duration unavailable"}{" "}
+                              · {item.status}
+                            </p>
+                          </div>
+                          <div>
+                            <button
+                              disabled={index === 0}
+                              aria-label={`Move ${item.title} up`}
+                              onClick={async () => {
+                                const next = [...playlistDetail.items];
+                                [next[index - 1], next[index]] = [
+                                  next[index],
+                                  next[index - 1],
+                                ];
+                                try {
+                                  await savePlaylistItems(next);
+                                } catch (err) {
+                                  setNotice((err as Error).message);
+                                }
+                              }}
+                            >
+                              ↑
+                            </button>
+                            <button
+                              disabled={index === playlistDetail.items.length - 1}
+                              aria-label={`Move ${item.title} down`}
+                              onClick={async () => {
+                                const next = [...playlistDetail.items];
+                                [next[index], next[index + 1]] = [
+                                  next[index + 1],
+                                  next[index],
+                                ];
+                                try {
+                                  await savePlaylistItems(next);
+                                } catch (err) {
+                                  setNotice((err as Error).message);
+                                }
+                              }}
+                            >
+                              ↓
+                            </button>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await savePlaylistItems(
+                                    playlistDetail.items.filter(
+                                      (video: any) => video.id !== item.id,
+                                    ),
+                                  );
+                                } catch (err) {
+                                  setNotice((err as Error).message);
+                                }
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p>No videos in this playlist yet.</p>
+                    )}
+
+                    <form
+                      className="inline-form"
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        const form = new FormData(e.currentTarget);
+                        const videoId = String(form.get("videoId") ?? "");
+                        const candidate = playlistCandidates.find(
+                          (video) => video.id === videoId,
+                        );
+                        if (!candidate) return;
                         try {
-                          await api(`/playlists/${playlist.id}`, { method: "DELETE" });
-                          setPlaylists(await api(`/playlists?workspaceId=${workspace}`));
+                          await savePlaylistItems([
+                            ...playlistDetail.items,
+                            candidate,
+                          ]);
+                          e.currentTarget.reset();
                         } catch (err) {
                           setNotice((err as Error).message);
                         }
                       }}
                     >
-                      Delete
-                    </button>
-                  </div>
-                ))
+                      <select name="videoId" defaultValue="" required>
+                        <option value="" disabled>
+                          Add a ready video…
+                        </option>
+                        {playlistCandidates
+                          .filter(
+                            (candidate) =>
+                              !playlistDetail.items.some(
+                                (item: any) => item.id === candidate.id,
+                              ),
+                          )
+                          .map((candidate) => (
+                            <option key={candidate.id} value={candidate.id}>
+                              {candidate.title}
+                            </option>
+                          ))}
+                      </select>
+                      <button className="primary">Add video</button>
+                    </form>
+                  </section>
+
+                  <button
+                    className="danger"
+                    onClick={async () => {
+                      if (
+                        !confirm(
+                          `Delete playlist “${playlistDetail.name}”? Videos will not be deleted.`,
+                        )
+                      )
+                        return;
+                      try {
+                        await api(`/playlists/${playlistDetail.id}`, {
+                          method: "DELETE",
+                        });
+                        setPlaylistDetail(null);
+                        setPlaylists(
+                          await api(`/playlists?workspaceId=${workspace}`),
+                        );
+                      } catch (err) {
+                        setNotice((err as Error).message);
+                      }
+                    }}
+                  >
+                    Delete playlist
+                  </button>
+                </>
               ) : (
-                <div className="empty">
-                  <FolderOpen size={36} />
-                  <h2>No playlists yet</h2>
-                  <p>Create one here, then manage its ordered video IDs through the API or SDK.</p>
-                </div>
+                <>
+                  <div className="page-heading">
+                    <div>
+                      <div className="eyebrow">ORGANIZE YOUR LIBRARY</div>
+                      <h1>Playlists</h1>
+                      <p>
+                        Create ordered collections for delivery, review, or
+                        curation.
+                      </p>
+                    </div>
+                  </div>
+                  <form
+                    className="panel inline-form"
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const form = new FormData(e.currentTarget);
+                      try {
+                        await post("/playlists", {
+                          workspaceId: workspace,
+                          name: form.get("name"),
+                        });
+                        setPlaylists(
+                          await api(`/playlists?workspaceId=${workspace}`),
+                        );
+                        e.currentTarget.reset();
+                      } catch (err) {
+                        setNotice((err as Error).message);
+                      }
+                    }}
+                  >
+                    <input
+                      name="name"
+                      maxLength={200}
+                      placeholder="Playlist name"
+                      required
+                    />
+                    <button className="primary">Create playlist</button>
+                  </form>
+                  {playlists.length ? (
+                    playlists.map((playlist) => (
+                      <button
+                        className="resource-row"
+                        key={playlist.id}
+                        onClick={async () => {
+                          try {
+                            const [detail, candidates] = await Promise.all([
+                              api(`/playlists/${playlist.id}`),
+                              api(
+                                `/videos?workspaceId=${workspace}&status=ready&limit=100`,
+                              ),
+                            ]);
+                            setPlaylistDetail(detail);
+                            setPlaylistCandidates(candidates.items);
+                          } catch (err) {
+                            setNotice((err as Error).message);
+                          }
+                        }}
+                      >
+                        <FolderOpen />
+                        <div>
+                          <strong>{playlist.name}</strong>
+                          <p>
+                            {playlist.item_count} video
+                            {Number(playlist.item_count) === 1 ? "" : "s"} · Open
+                            editor
+                          </p>
+                        </div>
+                        <ArrowUpRight size={16} />
+                      </button>
+                    ))
+                  ) : (
+                    <div className="empty">
+                      <FolderOpen size={36} />
+                      <h2>No playlists yet</h2>
+                      <p>Create a playlist, then add and reorder ready videos.</p>
+                    </div>
+                  )}
+                </>
               )}
             </>
           ) : section === "keys" ? (
