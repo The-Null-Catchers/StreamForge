@@ -405,6 +405,42 @@ test(
       assert.equal(playlistDetail.body.items[0].id, v.id);
       assert.equal(
         (
+          await request(`/api/v1/playlists/${playlistId}`, "PATCH", {
+            name: "Curated integration playlist",
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (
+          await request(`/api/v1/playlists/${playlistId}/items`, "PUT", {
+            videoIds: [v.id, replacementId],
+          })
+        ).status,
+        200,
+      );
+      assert.deepEqual(
+        (
+          await request(`/api/v1/playlists/${playlistId}`)
+        ).body.items.map((item: any) => item.id),
+        [v.id, replacementId],
+      );
+      assert.equal(
+        (
+          await request(`/api/v1/playlists/${playlistId}/items`, "PUT", {
+            videoIds: [replacementId, v.id],
+          })
+        ).status,
+        200,
+      );
+      assert.deepEqual(
+        (
+          await request(`/api/v1/playlists/${playlistId}`)
+        ).body.items.map((item: any) => item.id),
+        [replacementId, v.id],
+      );
+      assert.equal(
+        (
           await request(`/api/v1/playlists/${playlistId}/items`, "PUT", {
             videoIds: [v.id, v.id],
           })
