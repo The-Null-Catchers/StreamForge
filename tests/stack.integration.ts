@@ -468,6 +468,9 @@ test(
         event: "play",
         position: 0,
         startupMs: 180,
+        deviceType: "desktop",
+        browserFamily: "chrome",
+        osFamily: "linux",
       });
       await request("/api/v1/analytics/events", "POST", {
         id: randomUUID(),
@@ -494,6 +497,14 @@ test(
       );
       assert.equal(Number(realtime.body.active_viewers), 1);
       assert.equal(Number(realtime.body.qualities["720p"]), 1);
+      const breakdown = await request(
+        `/api/v1/videos/${v.id}/analytics/breakdown?days=30`,
+      );
+      assert.equal(breakdown.status, 200);
+      assert.equal(Number(breakdown.body.totalSessions), 1);
+      assert.equal(Number(breakdown.body.devices.desktop), 1);
+      assert.equal(Number(breakdown.body.browsers.chrome), 1);
+      assert.equal(Number(breakdown.body.operatingSystems.linux), 1);
       let daily: any[] = [];
       for (let i = 0; i < 20; i++) {
         const result = await request(
