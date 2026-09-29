@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { profiles, subtitleVtt } from "../packages/media-core/src/index.js";
+import { profiles, subtitleVtt, subtitleSegments } from "../packages/media-core/src/index.js";
 import {
   publicAddress,
   can,
@@ -65,6 +65,16 @@ test("SRT conversion preserves Arabic and converts timestamp syntax", () => {
   assert.ok(vtt.includes("00:00:01.000"));
   assert.ok(vtt.includes("مرحبا"));
   assert.throws(() => subtitleVtt("not subtitles"));
+});
+
+test("subtitle cues become searchable timestamped transcript segments", () => {
+  const segments = subtitleSegments(
+    "WEBVTT\n\n00:00:01.000 --> 00:00:03.500\n<v Speaker>مرحبا بالعالم</v>\n\n00:04.000 --> 00:05.250\nBuild &amp; ship",
+  );
+  assert.deepEqual(segments, [
+    { startSeconds: 1, endSeconds: 3.5, text: "مرحبا بالعالم" },
+    { startSeconds: 4, endSeconds: 5.25, text: "Build & ship" },
+  ]);
 });
 
 test("webhook address policy excludes loopback, private, mapped private and link-local IPs", () => {
