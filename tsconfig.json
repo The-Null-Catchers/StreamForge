@@ -14,7 +14,8 @@
     "apps/api/**/*.ts",
     "apps/worker/**/*.ts",
     "packages/**/*.ts",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    "infra/scripts/**/*.ts"
   ],
   "exclude": ["node_modules", "apps/web"]
 }

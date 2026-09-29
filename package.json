@@ -20,7 +20,8 @@
     "test:media": "node --import tsx --test tests/media.integration.ts",
     "test:integration": "node --import tsx --test tests/stack.integration.ts",
     "build": "tsc && npm run build -w apps/web",
-    "dev": "npm run dev -w apps/web"
+    "dev": "npm run dev -w apps/web",
+    "storage:init": "node --import tsx infra/scripts/init-storage.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.900.0",

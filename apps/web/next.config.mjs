@@ -1,5 +1,4 @@
 export default {
-  output: "standalone",
   poweredByHeader: false,
   async headers() {
     return [

@@ -23,3 +23,7 @@ The development initializer creates a private bucket. Production must create its
 Soft deletion revokes API media access immediately, then cleanup deletes the entire video prefix, including the source. Analytics remain for the configured implementation retention of 90 days. Source retention policy is not yet selectable. Object deletion failures are retried; monitor final failed cleanup jobs.
 
 S3 presigning is available on the adapter but deliberately not returned as permanent browser URLs. Current delivery proxies authorized bytes through the API; CDN edge token enforcement is an extension point, not already deployed CDN integration.
+
+## Development MinIO image
+
+MinIO community distribution moved to source-only. The development image builds the pinned `RELEASE.2025-10-15T17-29-55Z` source with Go and includes its AGPL license. The Node AWS SDK initializes a private bucket, avoiding unavailable historical Docker Hub server/client images. See the [upstream repository](https://github.com/minio/minio) for maintenance and licensing status. For production, use an actively maintained managed S3-compatible service or a separately reviewed storage deployment.
