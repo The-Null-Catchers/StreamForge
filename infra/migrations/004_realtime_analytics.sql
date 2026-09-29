@@ -1,5 +1,5 @@
 ALTER TABLE playback_sessions
-  ADD COLUMN IF NOT EXISTS last_seen_at timestamptz NOT NULL DEFAULT now();
+  ADD COLUMN IF NOT EXISTS last_seen_at timestamptz;
 
 CREATE INDEX IF NOT EXISTS playback_sessions_video_last_seen
   ON playback_sessions(video_id,last_seen_at DESC);
