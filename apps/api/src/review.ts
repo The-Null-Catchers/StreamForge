@@ -57,6 +57,8 @@ export async function reviewRoutes(app: FastifyInstance) {
       );
       if (source.workspace_id !== video.workspace_id)
         throw new ApiError(400, "VERSION_SOURCE_WORKSPACE_MISMATCH");
+      if (source.id === video.id)
+        throw new ApiError(409, "VERSION_SOURCE_SAME_VIDEO");
       if (source.status !== "ready")
         throw new ApiError(409, "VERSION_SOURCE_NOT_READY");
 
@@ -68,6 +70,41 @@ export async function reviewRoutes(app: FastifyInstance) {
       );
       const created = await transaction(async (c) => {
         await c.query("SELECT id FROM videos WHERE id=$1 FOR UPDATE", [video.id]);
+        const existing = Number(
+          (
+            await c.query(
+              "SELECT count(*) AS n FROM video_versions WHERE video_id=$1",
+              [video.id],
+            )
+          ).rows[0].n,
+        );
+        if (existing === 0) {
+          const baseline = (
+            await c.query(
+              `INSERT INTO video_versions(
+                 video_id,version_number,label,source_video_id,source_key,output_prefix,
+                 filename,checksum,size,metadata,renditions,created_by
+               ) VALUES($1,1,$2,$1,$3,$4,$5,$6,$7,$8,$9,$10)
+               RETURNING id`,
+              [
+                video.id,
+                "Initial version",
+                video.source_key,
+                video.output_prefix,
+                video.filename,
+                video.checksum,
+                video.size,
+                video.metadata,
+                video.renditions,
+                a.userId ?? a.keyId,
+              ],
+            )
+          ).rows[0];
+          await c.query(
+            "UPDATE videos SET active_version_id=$1 WHERE id=$2 AND active_version_id IS NULL",
+            [baseline.id, video.id],
+          );
+        }
         const next = (
           await c.query(
             "SELECT COALESCE(max(version_number),0)+1 AS n FROM video_versions WHERE video_id=$1",
