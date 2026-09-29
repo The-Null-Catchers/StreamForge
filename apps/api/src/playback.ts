@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { SignJWT, jwtVerify } from "jose";
 import { z } from "zod";
 import { db, transaction } from "../../../packages/shared/src/db.js";
+import { enqueue } from "../../../packages/shared/src/events.js";
 import { storage } from "../../../packages/shared/src/storage.js";
 import { config } from "../../../packages/config/src/index.js";
 import { videoAccess, ApiError, uuid, playbackSecret } from "./context.js";
@@ -205,19 +206,40 @@ export async function playbackRoutes(app: FastifyInstance) {
         ]),
         position: z.number().min(0).max(86400).default(0),
         watchSeconds: z.number().min(0).max(15).default(0),
+        quality: z.string().regex(/^\d{3,4}p$/).optional(),
+        startupMs: z.number().int().min(0).max(120000).optional(),
       })
       .parse(req.body);
     const claims = await playbackClaims(b.token);
-    await db.query(
-      "INSERT INTO analytics_events(id,session_id,video_id,event,position,watch_seconds) SELECT $1,id,video_id,$2,$3,$4 FROM playback_sessions WHERE id=$5 AND expires_at>now() ON CONFLICT DO NOTHING",
-      [
-        b.id,
-        b.event,
-        b.position,
-        b.event === "heartbeat" ? b.watchSeconds : 0,
-        claims.sessionId,
-      ],
-    );
+    await transaction(async (client) => {
+      const inserted = await client.query(
+        `INSERT INTO analytics_events(id,session_id,video_id,event,position,watch_seconds,quality,startup_ms)
+         SELECT $1,id,video_id,$2,$3,$4,$5,$6
+         FROM playback_sessions
+         WHERE id=$7 AND expires_at>now()
+         ON CONFLICT DO NOTHING
+         RETURNING session_id,video_id,created_at`,
+        [
+          b.id,
+          b.event,
+          b.position,
+          b.event === "heartbeat" ? b.watchSeconds : 0,
+          b.quality ?? null,
+          b.startupMs ?? null,
+          claims.sessionId,
+        ],
+      );
+      if (!inserted.rowCount) return;
+      await client.query(
+        "UPDATE playback_sessions SET last_seen_at=now() WHERE id=$1",
+        [claims.sessionId],
+      );
+      const event = inserted.rows[0];
+      await enqueue(client, "analytics", {
+        videoId: event.video_id,
+        day: new Date(event.created_at).toISOString().slice(0, 10),
+      });
+    });
     return { ok: true };
   });
   app.get<{ Params: { id: string } }>(
@@ -226,7 +248,88 @@ export async function playbackRoutes(app: FastifyInstance) {
       await videoAccess(req, req.params.id, "viewer", "analytics:read");
       return (
         await db.query(
-          `SELECT count(*) FILTER(WHERE event='play') AS plays,count(DISTINCT session_id) AS playback_sessions,coalesce(sum(watch_seconds),0) AS watch_seconds,count(*) FILTER(WHERE event='ended') AS completions,count(*) FILTER(WHERE event='error') AS errors FROM analytics_events WHERE video_id=$1`,
+          `WITH base AS (
+             SELECT
+               count(*) FILTER(WHERE event='play') AS plays,
+               count(DISTINCT session_id) AS unique_viewers,
+               coalesce(sum(watch_seconds),0) AS watch_seconds,
+               count(*) FILTER(WHERE event='ended') AS completions,
+               count(*) FILTER(WHERE event='error') AS errors,
+               count(*) FILTER(WHERE event='buffer_start') AS buffer_starts,
+               avg(startup_ms) FILTER(WHERE startup_ms IS NOT NULL) AS avg_startup_ms
+             FROM analytics_events
+             WHERE video_id=$1
+           )
+           SELECT
+             base.*,
+             CASE WHEN unique_viewers=0 THEN 0
+                  ELSE completions::double precision / unique_viewers END AS completion_rate,
+             CASE
+               WHEN unique_viewers=0 OR coalesce((v.metadata->>'duration')::double precision,0)=0 THEN 0
+               ELSE least(
+                 100,
+                 100 * watch_seconds::double precision /
+                 (unique_viewers * (v.metadata->>'duration')::double precision)
+               )
+             END AS average_watch_percentage
+           FROM base
+           JOIN videos v ON v.id=$1`,
+          [req.params.id],
+        )
+      ).rows[0];
+    },
+  );
+  app.get<{
+    Params: { id: string };
+    Querystring: { days?: string };
+  }>("/api/v1/videos/:id/analytics/daily", async (req) => {
+    await videoAccess(req, req.params.id, "viewer", "analytics:read");
+    const query = z
+      .object({ days: z.coerce.number().int().min(1).max(90).default(30) })
+      .parse(req.query);
+    return (
+      await db.query(
+        `SELECT
+           day,plays,unique_viewers,watch_seconds,completions,errors,
+           buffer_starts,buffer_seconds,avg_startup_ms,
+           CASE WHEN watch_seconds + buffer_seconds = 0 THEN 0
+                ELSE buffer_seconds / (watch_seconds + buffer_seconds) END AS buffering_ratio
+         FROM analytics_daily
+         WHERE video_id=$1 AND day >= current_date - ($2::int - 1)
+         ORDER BY day ASC`,
+        [req.params.id, query.days],
+      )
+    ).rows;
+  });
+  app.get<{ Params: { id: string } }>(
+    "/api/v1/videos/:id/analytics/realtime",
+    async (req) => {
+      await videoAccess(req, req.params.id, "viewer", "analytics:read");
+      return (
+        await db.query(
+          `WITH recent AS (
+             SELECT id
+             FROM playback_sessions
+             WHERE video_id=$1 AND last_seen_at > now() - interval '30 seconds'
+           ),
+           latest_quality AS (
+             SELECT DISTINCT ON (e.session_id) e.session_id,e.quality
+             FROM analytics_events e
+             JOIN recent r ON r.id=e.session_id
+             WHERE e.quality IS NOT NULL
+             ORDER BY e.session_id,e.created_at DESC
+           )
+           SELECT
+             (SELECT count(*) FROM recent) AS active_viewers,
+             coalesce(
+               jsonb_object_agg(quality,viewer_count) FILTER(WHERE quality IS NOT NULL),
+               '{}'::jsonb
+             ) AS qualities
+           FROM (
+             SELECT quality,count(*) AS viewer_count
+             FROM latest_quality
+             GROUP BY quality
+           ) q`,
           [req.params.id],
         )
       ).rows[0];
