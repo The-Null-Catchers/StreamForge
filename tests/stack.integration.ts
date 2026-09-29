@@ -219,6 +219,68 @@ test(
         ).status,
         200,
       );
+      const chapterUpdate = await request(
+        `/api/v1/videos/${v.id}/chapters`,
+        "PUT",
+        {
+          chapters: [
+            { startSeconds: 0, title: "Introduction" },
+            { startSeconds: 4.5, title: "Demo" },
+          ],
+        },
+      );
+      assert.equal(chapterUpdate.status, 200, JSON.stringify(chapterUpdate.body));
+      const chapterList = await request(`/api/v1/videos/${v.id}/chapters`);
+      assert.equal(chapterList.status, 200);
+      assert.deepEqual(
+        chapterList.body.map((chapter: any) => chapter.title),
+        ["Introduction", "Demo"],
+      );
+      assert.equal(
+        (
+          await request(`/api/v1/videos/${v.id}/chapters`, "PUT", {
+            chapters: [
+              { startSeconds: 1, title: "One" },
+              { startSeconds: 1, title: "Duplicate" },
+            ],
+          })
+        ).status,
+        409,
+      );
+
+      const playlistCreated = await request("/api/v1/playlists", "POST", {
+        workspaceId: ws.id,
+        name: "Integration playlist",
+      });
+      assert.equal(
+        playlistCreated.status,
+        201,
+        JSON.stringify(playlistCreated.body),
+      );
+      const playlistId = playlistCreated.body.id;
+      assert.equal(
+        (
+          await request(`/api/v1/playlists/${playlistId}/items`, "PUT", {
+            videoIds: [v.id],
+          })
+        ).status,
+        200,
+      );
+      const playlistDetail = await request(
+        `/api/v1/playlists/${playlistId}`,
+      );
+      assert.equal(playlistDetail.status, 200);
+      assert.equal(playlistDetail.body.items.length, 1);
+      assert.equal(playlistDetail.body.items[0].id, v.id);
+      assert.equal(
+        (
+          await request(`/api/v1/playlists/${playlistId}/items`, "PUT", {
+            videoIds: [v.id, v.id],
+          })
+        ).status,
+        409,
+      );
+
       await request("/api/v1/analytics/events", "POST", {
         id: randomUUID(),
         token: playback.token,
