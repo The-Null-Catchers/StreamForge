@@ -80,6 +80,7 @@ export default function Dashboard() {
   const [keys, setKeys] = useState<any[]>([]);
   const [hooks, setHooks] = useState<any[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);
+  const [realtimeAnalytics, setRealtimeAnalytics] = useState<any>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [chapters, setChapters] = useState<any[]>([]);
   const [playlists, setPlaylists] = useState<any[]>([]);
@@ -185,11 +186,30 @@ export default function Dashboard() {
     };
   }, [workspace, load]);
   useEffect(() => {
-    if (selected?.status === "ready")
-      void api(`/videos/${selected.id}/analytics`)
-        .then(setAnalytics)
-        .catch(() => {});
-    else setAnalytics(null);
+    if (selected?.status !== "ready") {
+      setAnalytics(null);
+      setRealtimeAnalytics(null);
+      return;
+    }
+    let active = true;
+    const refresh = async () => {
+      try {
+        const [summary, realtime] = await Promise.all([
+          api(`/videos/${selected.id}/analytics`),
+          api(`/videos/${selected.id}/analytics/realtime`),
+        ]);
+        if (active) {
+          setAnalytics(summary);
+          setRealtimeAnalytics(realtime);
+        }
+      } catch {}
+    };
+    void refresh();
+    const timer = setInterval(() => void refresh(), 10000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
   }, [selected?.id, selected?.status]);
   useEffect(() => {
     if (!selected) {
@@ -645,24 +665,52 @@ export default function Dashboard() {
                 <section className="panel">
                   <h3>Playback analytics</h3>
                   {analytics ? (
-                    <div className="analytics">
-                      <div>
-                        <strong>{analytics.plays}</strong>
-                        <span>Plays</span>
+                    <>
+                      <div className="analytics">
+                        <div>
+                          <strong>{analytics.plays}</strong>
+                          <span>Plays</span>
+                        </div>
+                        <div>
+                          <strong>{analytics.unique_viewers}</strong>
+                          <span>Unique sessions</span>
+                        </div>
+                        <div>
+                          <strong>{time(Number(analytics.watch_seconds))}</strong>
+                          <span>Watch time</span>
+                        </div>
+                        <div>
+                          <strong>{Number(analytics.completion_rate).toFixed(1)}%</strong>
+                          <span>Completion rate</span>
+                        </div>
+                        <div>
+                          <strong>{Number(analytics.average_watch_percentage).toFixed(1)}%</strong>
+                          <span>Average watched</span>
+                        </div>
+                        <div>
+                          <strong>{Number(analytics.buffering_ratio).toFixed(2)}%</strong>
+                          <span>Buffering ratio</span>
+                        </div>
+                        <div>
+                          <strong>{Math.round(Number(analytics.average_startup_ms))} ms</strong>
+                          <span>Average startup</span>
+                        </div>
+                        <div>
+                          <strong>{Number(analytics.error_rate).toFixed(2)}%</strong>
+                          <span>Error rate</span>
+                        </div>
                       </div>
-                      <div>
-                        <strong>{time(Number(analytics.watch_seconds))}</strong>
-                        <span>Watch time</span>
-                      </div>
-                      <div>
-                        <strong>{analytics.completions}</strong>
-                        <span>Completions</span>
-                      </div>
-                      <div>
-                        <strong>{analytics.playback_sessions}</strong>
-                        <span>Playback sessions</span>
-                      </div>
-                    </div>
+                      {realtimeAnalytics && (
+                        <p>
+                          Watching now: <strong>{realtimeAnalytics.activeViewers}</strong>
+                          {Object.keys(realtimeAnalytics.qualities ?? {}).length
+                            ? ` · ${Object.entries(realtimeAnalytics.qualities)
+                                .map(([quality, count]) => `${quality}: ${count}`)
+                                .join(" · ")}`
+                            : ""}
+                        </p>
+                      )}
+                    </>
                   ) : (
                     <p>Analytics appear after your video is ready.</p>
                   )}
