@@ -55,6 +55,30 @@ async function newSession(user: string) {
 }
 export async function authRoutes(app: FastifyInstance) {
   app.post(
+    "/api/v1/auth/resend-verification",
+    { config: { rateLimit: { max: 3, timeWindow: "1 minute" } } },
+    async (req) => {
+      const { email } = z
+        .object({
+          email: z
+            .email()
+            .max(254)
+            .transform((x) => x.toLowerCase()),
+        })
+        .parse(req.body);
+      const result = await db.query(
+        "SELECT id FROM users WHERE email=$1 AND email_verified=false",
+        [email],
+      );
+      if (result.rowCount) await sendToken(result.rows[0].id, email, "verify");
+      return {
+        message:
+          "If the account needs verification, a new email has been sent.",
+      };
+    },
+  );
+
+  app.post(
     "/api/v1/auth/register",
     { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
     async (req, reply) => {

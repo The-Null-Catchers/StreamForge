@@ -357,6 +357,22 @@ export default function Dashboard() {
           </form>
           <div className="auth-links">
             <button
+              onClick={async () => {
+                const email = prompt("Email address for verification");
+                if (!email) return;
+                try {
+                  const result = await post("/auth/resend-verification", {
+                    email,
+                  });
+                  setNotice(result.message);
+                } catch (error) {
+                  setNotice((error as Error).message);
+                }
+              }}
+            >
+              Resend verification
+            </button>
+            <button
               onClick={() =>
                 setMode(mode === "register" ? "login" : "register")
               }

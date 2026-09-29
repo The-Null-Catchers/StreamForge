@@ -1,3 +1,4 @@
+import ipaddr from "ipaddr.js";
 import {
   createHash,
   createHmac,
@@ -38,4 +39,12 @@ export function expectedPartSize(total: number, chunk: number, part: number) {
   if (!Number.isInteger(part) || part < 0 || part >= Math.ceil(total / chunk))
     throw Error("INVALID_PART");
   return Math.min(chunk, total - part * chunk);
+}
+
+export function publicAddress(address: string) {
+  try {
+    return ipaddr.process(address).range() === "unicast";
+  } catch {
+    return false;
+  }
 }

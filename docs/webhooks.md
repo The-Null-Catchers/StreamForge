@@ -16,7 +16,7 @@ Signed bytes: `timestamp + '.' + exact raw JSON body`. Verify against the **raw*
 
 Payload: `{id,event,videoId,workspaceId}`. It does not include private media URLs.
 
-Delivery timeout is ten seconds; three attempts with exponential backoff. Only 2xx is success. Redirects are failures. PostgreSQL history stores response status and completed HTTP attempts. Network errors remain visible in BullMQ/logs but currently do not increment the database HTTP-response counter. Manual resend creates a new delivery ID with the same event payload. Disabled endpoints do not deliver queued events.
+Delivery timeout is ten seconds; three attempts with exponential backoff. Only 2xx is success. Redirects are failures. PostgreSQL history stores response status and all attempted deliveries, including network failures. Network failures have no HTTP response status. Manual resend creates a new delivery ID with the same event payload. Disabled endpoints do not deliver queued events.
 
 ```mermaid
 flowchart TD

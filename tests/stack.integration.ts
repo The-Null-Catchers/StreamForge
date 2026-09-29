@@ -82,9 +82,11 @@ test(
         "-i",
         "testsrc2=size=1280x720:rate=24",
         "-t",
-        "3",
+        "10",
         "-c:v",
         "libx264",
+        "-crf",
+        "0",
         "-threads",
         "2",
         file,
@@ -100,9 +102,14 @@ test(
           checksum: hash(bytes),
         })
       ).body;
+      assert.ok(
+        bytes.length > u.chunk_size,
+        "fixture spans multiple default-size chunks",
+      );
+      const first = bytes.subarray(0, u.chunk_size);
       const headers = {
         "Content-Type": "application/octet-stream",
-        "X-Checksum-Sha256": hash(bytes),
+        "X-Checksum-Sha256": hash(first),
       };
       assert.equal(
         (await request(`/api/v1/uploads/${u.id}/complete`, "POST", {})).status,
@@ -110,7 +117,7 @@ test(
       );
       assert.equal(
         (
-          await request(`/api/v1/uploads/${u.id}/parts/0`, "PUT", bytes, {
+          await request(`/api/v1/uploads/${u.id}/parts/0`, "PUT", first, {
             ...headers,
             "X-Checksum-Sha256": "0".repeat(64),
           })
@@ -122,27 +129,51 @@ test(
           await request(
             `/api/v1/uploads/${u.id}/parts/0`,
             "PUT",
-            bytes,
+            first,
             headers,
           )
         ).status,
         200,
       );
-      // A new status request models reconnection; resending a confirmed part is idempotent.
+      // Reconnect after only the first chunk, then skip confirmed parts.
       const resumed = await request(`/api/v1/uploads/${u.id}`);
-      assert.equal(Number(resumed.body.uploaded_bytes), bytes.length);
+      assert.equal(Number(resumed.body.uploaded_bytes), first.length);
       assert.equal(resumed.body.parts.length, 1);
+      assert.equal(
+        (await request(`/api/v1/uploads/${u.id}/complete`, "POST", {})).status,
+        409,
+      );
       assert.equal(
         (
           await request(
             `/api/v1/uploads/${u.id}/parts/0`,
             "PUT",
-            bytes,
+            first,
             headers,
           )
         ).status,
         200,
       );
+      for (
+        let part = 1;
+        part < Math.ceil(bytes.length / u.chunk_size);
+        part++
+      ) {
+        const chunk = bytes.subarray(
+          part * u.chunk_size,
+          (part + 1) * u.chunk_size,
+        );
+        const result = await request(
+          `/api/v1/uploads/${u.id}/parts/${part}`,
+          "PUT",
+          chunk,
+          {
+            "Content-Type": "application/octet-stream",
+            "X-Checksum-Sha256": hash(chunk),
+          },
+        );
+        assert.equal(result.status, 200, JSON.stringify(result.body));
+      }
       assert.equal(
         (await request(`/api/v1/uploads/${u.id}/complete`, "POST", {})).status,
         200,
@@ -215,6 +246,18 @@ test(
           })
         ).status,
         403,
+      );
+      token = savedToken;
+      const strangerWorkspace = randomUUID();
+      assert.equal(
+        (await request(`/api/v1/videos?workspaceId=${strangerWorkspace}`))
+          .status,
+        403,
+      );
+      token = "";
+      assert.equal(
+        (await request(`/api/v1/videos/${v.id}/playback`)).status,
+        401,
       );
       token = savedToken;
       const refreshed = (

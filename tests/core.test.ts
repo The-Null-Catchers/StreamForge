@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { profiles, subtitleVtt } from "../packages/media-core/src/index.js";
 import {
+  publicAddress,
   can,
   hash,
   signature,
@@ -64,4 +65,21 @@ test("SRT conversion preserves Arabic and converts timestamp syntax", () => {
   assert.ok(vtt.includes("00:00:01.000"));
   assert.ok(vtt.includes("مرحبا"));
   assert.throws(() => subtitleVtt("not subtitles"));
+});
+
+test("webhook address policy excludes loopback, private, mapped private and link-local IPs", () => {
+  for (const address of [
+    "127.0.0.1",
+    "10.1.2.3",
+    "172.16.0.1",
+    "192.168.1.1",
+    "169.254.169.254",
+    "::1",
+    "::ffff:127.0.0.1",
+    "fc00::1",
+    "fe80::1",
+    "0.0.0.0",
+  ])
+    assert.equal(publicAddress(address), false, address);
+  assert.equal(publicAddress("93.184.216.34"), true);
 });

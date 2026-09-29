@@ -4,7 +4,7 @@ Base: `/api/v1`. Authenticated requests use `Authorization: Bearer <access token
 
 | Resource       | Operations                                                                                                          |
 | -------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Authentication | `POST /auth/register`, `/login`, `/refresh`, `/verify`, `/forgot`, `/reset`, `/logout`, `/logout-all`               |
+| Authentication | `POST /auth/register`, `/login`, `/refresh`, `/verify`, `/resend-verification`, `/forgot`, `/reset`, `/logout`, `/logout-all`               |
 | Sessions       | `GET /auth/sessions`, `DELETE /auth/sessions/:id`                                                                   |
 | Workspaces     | `GET/POST /workspaces`, `GET /workspaces/:id/members`, `POST /workspaces/:id/invites`, `POST /invites/accept`       |
 | Membership     | `PATCH/DELETE /workspaces/:id/members/:user` (owner)                                                                |
