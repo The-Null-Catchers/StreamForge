@@ -124,3 +124,15 @@ pending
 approved
 changes_requested
 ```
+
+
+## Transcript search
+
+Subtitle uploads are converted to WebVTT and indexed as timestamped transcript segments. This works without an AI provider and supports multilingual text such as Arabic and English.
+
+- `GET /api/v1/videos/:id/transcript?search=...&language=...`
+- `GET /api/v1/transcripts/search?workspaceId=...&q=...&language=...`
+
+The per-video endpoint can return the full timestamped transcript when `search` is omitted. Workspace search returns matching video titles, timestamps, languages, and transcript text.
+
+Automatic speech-to-text is intentionally separate from this capability: a future `TranscriptionProvider` can populate the same transcript segment model without changing search clients.
