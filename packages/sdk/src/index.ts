@@ -138,6 +138,29 @@ export class StreamForge {
         `/videos/${encodeURIComponent(id)}/transcript?${q}`,
       );
     },
+    transcriptions: {
+      list: (id: string) =>
+        this.request<Array<{
+          id: string;
+          video_id: string;
+          provider: string;
+          model: string;
+          language: "auto" | "ar" | "en";
+          status: "queued" | "running" | "complete" | "failed";
+          progress: number;
+          subtitle_id?: string;
+          error_code?: string;
+        }>>(`/videos/${encodeURIComponent(id)}/transcriptions`),
+      create: (id: string, language: "auto" | "ar" | "en" = "auto") =>
+        this.request(`/videos/${encodeURIComponent(id)}/transcriptions`, {
+          method: "POST",
+          body: JSON.stringify({ language }),
+        }),
+      get: (id: string, transcriptionId: string) =>
+        this.request(
+          `/videos/${encodeURIComponent(id)}/transcriptions/${encodeURIComponent(transcriptionId)}`,
+        ),
+    },
     review: {
       comments: (id: string) =>
         this.request<ReviewComment[]>(`/videos/${encodeURIComponent(id)}/review-comments`),
