@@ -80,6 +80,9 @@ export default function Dashboard() {
   const [keys, setKeys] = useState<any[]>([]);
   const [hooks, setHooks] = useState<any[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);
+  const [analyticsDaily, setAnalyticsDaily] = useState<any[]>([]);
+  const [analyticsRealtime, setAnalyticsRealtime] = useState<any>(null);
+  const [analyticsBreakdown, setAnalyticsBreakdown] = useState<any>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [chapters, setChapters] = useState<any[]>([]);
   const [playlists, setPlaylists] = useState<any[]>([]);
@@ -185,11 +188,26 @@ export default function Dashboard() {
     };
   }, [workspace, load]);
   useEffect(() => {
-    if (selected?.status === "ready")
-      void api(`/videos/${selected.id}/analytics`)
-        .then(setAnalytics)
+    if (selected?.status === "ready") {
+      void Promise.all([
+        api(`/videos/${selected.id}/analytics`),
+        api(`/videos/${selected.id}/analytics/daily?days=14`),
+        api(`/videos/${selected.id}/analytics/realtime`),
+        api(`/videos/${selected.id}/analytics/breakdown?days=30`),
+      ])
+        .then(([summary, daily, realtime, breakdown]) => {
+          setAnalytics(summary);
+          setAnalyticsDaily(daily);
+          setAnalyticsRealtime(realtime);
+          setAnalyticsBreakdown(breakdown);
+        })
         .catch(() => {});
-    else setAnalytics(null);
+    } else {
+      setAnalytics(null);
+      setAnalyticsDaily([]);
+      setAnalyticsRealtime(null);
+      setAnalyticsBreakdown(null);
+    }
   }, [selected?.id, selected?.status]);
   useEffect(() => {
     if (!selected) {
@@ -645,24 +663,114 @@ export default function Dashboard() {
                 <section className="panel">
                   <h3>Playback analytics</h3>
                   {analytics ? (
-                    <div className="analytics">
-                      <div>
-                        <strong>{analytics.plays}</strong>
-                        <span>Plays</span>
+                    <>
+                      <div className="analytics">
+                        <div>
+                          <strong>{analytics.plays}</strong>
+                          <span>Plays</span>
+                        </div>
+                        <div>
+                          <strong>{analytics.unique_viewers}</strong>
+                          <span>Unique viewers</span>
+                        </div>
+                        <div>
+                          <strong>{time(Number(analytics.watch_seconds))}</strong>
+                          <span>Watch time</span>
+                        </div>
+                        <div>
+                          <strong>
+                            {Number(analytics.average_watch_percentage ?? 0).toFixed(1)}%
+                          </strong>
+                          <span>Average watched</span>
+                        </div>
+                        <div>
+                          <strong>
+                            {(Number(analytics.completion_rate ?? 0) * 100).toFixed(1)}%
+                          </strong>
+                          <span>Completion rate</span>
+                        </div>
+                        <div>
+                          <strong>
+                            {analytics.avg_startup_ms == null
+                              ? "—"
+                              : `${Math.round(Number(analytics.avg_startup_ms))} ms`}
+                          </strong>
+                          <span>Average startup</span>
+                        </div>
                       </div>
-                      <div>
-                        <strong>{time(Number(analytics.watch_seconds))}</strong>
-                        <span>Watch time</span>
+                      <div className="realtime-strip">
+                        <span className="live-dot" />
+                        <strong>
+                          {Number(analyticsRealtime?.active_viewers ?? 0)}
+                        </strong>
+                        <span>watching now</span>
+                        <small>
+                          {Object.entries(
+                            analyticsRealtime?.qualities ?? {},
+                          )
+                            .map(([quality, count]) => `${quality}: ${count}`)
+                            .join(" · ") || "No active quality data"}
+                        </small>
                       </div>
-                      <div>
-                        <strong>{analytics.completions}</strong>
-                        <span>Completions</span>
-                      </div>
-                      <div>
-                        <strong>{analytics.playback_sessions}</strong>
-                        <span>Playback sessions</span>
-                      </div>
-                    </div>
+                      {analyticsDaily.length > 0 && (
+                        <div className="analytics-chart">
+                          <div className="analytics-chart-head">
+                            <strong>Last 14 days</strong>
+                            <span>Daily plays</span>
+                          </div>
+                          <div className="analytics-bars">
+                            {analyticsDaily.map((day) => {
+                              const max = Math.max(
+                                1,
+                                ...analyticsDaily.map((x) => Number(x.plays)),
+                              );
+                              const height = Math.max(
+                                5,
+                                (Number(day.plays) / max) * 100,
+                              );
+                              return (
+                                <div
+                                  className="analytics-bar-item"
+                                  key={day.day}
+                                  title={`${day.day}: ${day.plays} plays`}
+                                >
+                                  <i style={{ height: `${height}%` }} />
+                                  <span>
+                                    {new Date(day.day).toLocaleDateString(
+                                      undefined,
+                                      { month: "short", day: "numeric" },
+                                    )}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {analyticsBreakdown && (
+                        <div className="analytics-breakdown">
+                          {[
+                            ["Devices", analyticsBreakdown.devices],
+                            ["Browsers", analyticsBreakdown.browsers],
+                            ["Operating systems", analyticsBreakdown.operatingSystems],
+                          ].map(([label, values]) => (
+                            <div key={label as string}>
+                              <strong>{label as string}</strong>
+                              {Object.entries(
+                                (values ?? {}) as Record<string, number>,
+                              )
+                                .sort((a, b) => Number(b[1]) - Number(a[1]))
+                                .map(([name, count]) => (
+                                  <span key={name}>
+                                    <b>{name}</b>
+                                    <em>{String(count)}</em>
+                                  </span>
+                                ))}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <p>Analytics appear after your video is ready.</p>
                   )}

@@ -65,14 +65,52 @@ export default function Player({
     const video = ref.current;
     if (!data || !video) return;
     let lastTime = Date.now();
+    const loadStartedAt = performance.now();
+    let startupSent = false;
     let disposed = false;
-    const send = (event: string, watchSeconds = 0) =>
+    const ua = navigator.userAgent.toLowerCase();
+    const deviceType = /ipad|tablet/.test(ua)
+      ? "tablet"
+      : /iphone|android.*mobile|mobile/.test(ua)
+        ? "mobile"
+        : /smart-tv|smarttv|hbbtv|appletv/.test(ua)
+          ? "tv"
+          : "desktop";
+    const browserFamily = /edg\//.test(ua)
+      ? "edge"
+      : /firefox\//.test(ua)
+        ? "firefox"
+        : /chrome\//.test(ua) || /crios\//.test(ua)
+          ? "chrome"
+          : /safari\//.test(ua)
+            ? "safari"
+            : "other";
+    const osFamily = /iphone|ipad|ios/.test(ua)
+      ? "ios"
+      : /android/.test(ua)
+        ? "android"
+        : /windows/.test(ua)
+          ? "windows"
+          : /mac os|macintosh/.test(ua)
+            ? "macos"
+            : /linux/.test(ua)
+              ? "linux"
+              : "other";
+    const send = (
+      event: string,
+      watchSeconds = 0,
+      extras: Record<string, unknown> = {},
+    ) =>
       void post("/analytics/events", {
         id: crypto.randomUUID(),
         token: data.token,
         event,
         position: video.currentTime || 0,
         watchSeconds,
+        deviceType,
+        browserFamily,
+        osFamily,
+        ...extras,
       }).catch(() => {});
     if (Hls.isSupported()) {
       const hls = new Hls();
@@ -88,7 +126,10 @@ export default function Player({
             "Playback failed. The link may have expired; retry to refresh it.",
           );
       });
-      hls.on(Hls.Events.LEVEL_SWITCHED, () => send("quality_change"));
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_event, detail) => {
+        const height = hls.levels[detail.level]?.height;
+        send("quality_change", 0, height ? { quality: `${height}p` } : {});
+      });
     } else if (video.canPlayType("application/vnd.apple.mpegurl"))
       video.src = data.url;
     else setError("This browser does not support HLS playback.");
@@ -116,6 +157,12 @@ export default function Player({
       playing: () => {
         setBuffering(false);
         send("buffer_end");
+        if (!startupSent) {
+          startupSent = true;
+          send("video_loaded", 0, {
+            startupMs: Math.max(0, Math.round(performance.now() - loadStartedAt)),
+          });
+        }
       },
       ended: () => send("ended"),
       error: () => send("error"),

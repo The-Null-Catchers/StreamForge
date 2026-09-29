@@ -278,4 +278,13 @@ export class StreamForge {
     >(
       `/videos/${encodeURIComponent(id)}/analytics/daily?days=${encodeURIComponent(String(days))}`,
     );
+  analyticsBreakdown = (id: string, days = 30) =>
+    this.request<{
+      totalSessions: number;
+      devices: Record<string, number>;
+      browsers: Record<string, number>;
+      operatingSystems: Record<string, number>;
+    }>(
+      `/videos/${encodeURIComponent(id)}/analytics/breakdown?days=${encodeURIComponent(String(days))}`,
+    );
 }

@@ -208,6 +208,9 @@ export async function playbackRoutes(app: FastifyInstance) {
         watchSeconds: z.number().min(0).max(15).default(0),
         quality: z.string().regex(/^\d{3,4}p$/).optional(),
         startupMs: z.number().int().min(0).max(120000).optional(),
+        deviceType: z.enum(["desktop","mobile","tablet","tv","other"]).optional(),
+        browserFamily: z.enum(["chrome","firefox","safari","edge","other"]).optional(),
+        osFamily: z.enum(["windows","macos","linux","android","ios","other"]).optional(),
       })
       .parse(req.body);
     const claims = await playbackClaims(b.token);
@@ -231,8 +234,18 @@ export async function playbackRoutes(app: FastifyInstance) {
       );
       if (!inserted.rowCount) return;
       await client.query(
-        "UPDATE playback_sessions SET last_seen_at=now() WHERE id=$1",
-        [claims.sessionId],
+        `UPDATE playback_sessions
+         SET last_seen_at=now(),
+             device_type=coalesce(device_type,$2),
+             browser_family=coalesce(browser_family,$3),
+             os_family=coalesce(os_family,$4)
+         WHERE id=$1`,
+        [
+          claims.sessionId,
+          b.deviceType ?? null,
+          b.browserFamily ?? null,
+          b.osFamily ?? null,
+        ],
       );
       const event = inserted.rows[0];
       await enqueue(client, "analytics", {
@@ -300,6 +313,38 @@ export async function playbackRoutes(app: FastifyInstance) {
         [req.params.id, query.days],
       )
     ).rows;
+  });
+  app.get<{
+    Params: { id: string };
+    Querystring: { days?: string };
+  }>("/api/v1/videos/:id/analytics/breakdown", async (req) => {
+    await videoAccess(req, req.params.id, "viewer", "analytics:read");
+    const query = z
+      .object({ days: z.coerce.number().int().min(1).max(90).default(30) })
+      .parse(req.query);
+    const rows = (
+      await db.query(
+        `SELECT device_type,browser_family,os_family
+         FROM playback_sessions
+         WHERE video_id=$1
+           AND last_seen_at >= now() - ($2::int * interval '1 day')`,
+        [req.params.id, query.days],
+      )
+    ).rows;
+    const count = (key: "device_type" | "browser_family" | "os_family") => {
+      const out: Record<string, number> = {};
+      for (const row of rows) {
+        const value = row[key] ?? "other";
+        out[value] = (out[value] ?? 0) + 1;
+      }
+      return out;
+    };
+    return {
+      totalSessions: rows.length,
+      devices: count("device_type"),
+      browsers: count("browser_family"),
+      operatingSystems: count("os_family"),
+    };
   });
   app.get<{ Params: { id: string } }>(
     "/api/v1/videos/:id/analytics/realtime",
