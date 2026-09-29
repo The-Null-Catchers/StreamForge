@@ -243,6 +243,38 @@ test(
         activatedVersions.body.find((x: any) => x.id === versionCreate.body.id)?.active,
         true,
       );
+      assert.equal(
+        (await request(`/api/v1/videos/${replacementId}`, "DELETE")).status,
+        409,
+      );
+      assert.equal(
+        (
+          await request(
+            `/api/v1/videos/${v.id}/versions/${versionCreate.body.id}`,
+            "DELETE",
+          )
+        ).status,
+        409,
+      );
+      assert.equal(
+        (
+          await request(
+            `/api/v1/videos/${v.id}/versions/${baseline.id}/activate`,
+            "PUT",
+            {},
+          )
+        ).status,
+        200,
+      );
+      assert.equal(
+        (
+          await request(
+            `/api/v1/videos/${v.id}/versions/${versionCreate.body.id}`,
+            "DELETE",
+          )
+        ).status,
+        200,
+      );
 
       const reviewComment = await request(
         `/api/v1/videos/${v.id}/review-comments`,
