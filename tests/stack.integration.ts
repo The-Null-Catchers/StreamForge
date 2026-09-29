@@ -462,14 +462,44 @@ test(
         409,
       );
 
-      await request("/api/v1/analytics/events", "POST", {
-        id: randomUUID(),
-        token: playback.token,
-        event: "play",
-        position: 0,
-      });
+      for (const event of [
+        { event: "play", position: 0, quality: "720p" },
+        { event: "startup", position: 0, durationMs: 350, quality: "720p" },
+        { event: "heartbeat", position: 8, watchSeconds: 8, quality: "720p" },
+        { event: "buffer_start", position: 8, quality: "720p" },
+        { event: "buffer_end", position: 8, durationMs: 500, quality: "720p" },
+        { event: "ended", position: 10, quality: "720p" },
+      ])
+        assert.equal(
+          (
+            await request("/api/v1/analytics/events", "POST", {
+              id: randomUUID(),
+              token: playback.token,
+              ...event,
+            })
+          ).status,
+          200,
+        );
       const analytics = await request(`/api/v1/videos/${v.id}/analytics`);
       assert.equal(Number(analytics.body.plays), 1);
+      assert.equal(Number(analytics.body.unique_viewers), 1);
+      assert.equal(Number(analytics.body.watch_seconds), 8);
+      assert.equal(Number(analytics.body.completion_rate), 100);
+      assert.equal(Number(analytics.body.average_watch_percentage), 100);
+      assert.ok(Number(analytics.body.buffering_ratio) > 0);
+      assert.equal(Math.round(Number(analytics.body.average_startup_ms)), 350);
+      const realtimeAnalytics = await request(
+        `/api/v1/videos/${v.id}/analytics/realtime`,
+      );
+      assert.equal(realtimeAnalytics.status, 200);
+      assert.equal(realtimeAnalytics.body.activeViewers, 1);
+      assert.equal(Number(realtimeAnalytics.body.qualities["720p"]), 1);
+      const dailyAnalytics = await request(
+        `/api/v1/videos/${v.id}/analytics/daily`,
+      );
+      assert.equal(dailyAnalytics.status, 200);
+      assert.equal(dailyAnalytics.body.length, 1);
+      assert.equal(Number(dailyAnalytics.body[0].plays), 1);
       const key = (
         await request("/api/v1/api-keys", "POST", {
           workspaceId: ws.id,
