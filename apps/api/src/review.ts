@@ -67,9 +67,10 @@ export async function reviewRoutes(app: FastifyInstance) {
         "videos:write",
       );
       const created = await transaction(async (c) => {
+        await c.query("SELECT id FROM videos WHERE id=$1 FOR UPDATE", [video.id]);
         const next = (
           await c.query(
-            "SELECT COALESCE(max(version_number),0)+1 AS n FROM video_versions WHERE video_id=$1 FOR UPDATE",
+            "SELECT COALESCE(max(version_number),0)+1 AS n FROM video_versions WHERE video_id=$1",
             [video.id],
           )
         ).rows[0].n;
