@@ -140,6 +140,34 @@ export async function reviewRoutes(app: FastifyInstance) {
     },
   );
 
+  app.delete<{ Params: { id: string; versionId: string } }>(
+    "/api/v1/videos/:id/versions/:versionId",
+    async (req) => {
+      const video = await videoAccess(
+        req,
+        req.params.id,
+        "editor",
+        "videos:write",
+      );
+      uuid.parse(req.params.versionId);
+      if (video.active_version_id === req.params.versionId)
+        throw new ApiError(409, "ACTIVE_VERSION_CANNOT_BE_DELETED");
+      const a = await access(
+        req,
+        video.workspace_id,
+        "editor",
+        "videos:write",
+      );
+      const result = await db.query(
+        "DELETE FROM video_versions WHERE id=$1 AND video_id=$2 RETURNING id",
+        [req.params.versionId, video.id],
+      );
+      if (!result.rowCount) throw new ApiError(404, "VERSION_NOT_FOUND");
+      await audit(video.workspace_id, a, "video.version.deleted", req.params.versionId);
+      return { ok: true };
+    },
+  );
+
   app.put<{ Params: { id: string; versionId: string } }>(
     "/api/v1/videos/:id/versions/:versionId/activate",
     async (req) => {
