@@ -110,6 +110,10 @@ export class StreamForge {
           method: "PUT",
           body: JSON.stringify({}),
         }),
+      delete: (id: string, versionId: string) =>
+        this.request(`/videos/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}`, {
+          method: "DELETE",
+        }),
     },
     review: {
       comments: (id: string) =>
