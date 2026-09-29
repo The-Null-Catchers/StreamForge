@@ -13,6 +13,7 @@ import { videoRoutes } from "./videos.js";
 import { uploadRoutes } from "./uploads.js";
 import { playbackRoutes } from "./playback.js";
 import { platformRoutes } from "./platform.js";
+import { collectionRoutes } from "./collections.js";
 import { access } from "./context.js";
 export const app = Fastify({
   trustProxy: (_address, hop) => hop < 1,
@@ -113,6 +114,7 @@ await videoRoutes(app);
 await uploadRoutes(app);
 await playbackRoutes(app);
 await platformRoutes(app);
+await collectionRoutes(app);
 app.get<{ Params: { id: string } }>(
   "/api/v1/workspaces/:id/events",
   async (req, reply) => {
