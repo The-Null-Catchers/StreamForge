@@ -1,0 +1,37 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: npm run test:media
+      - run: npm run build
+  stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - run: docker compose up -d --build
+      - run: docker compose run --rm integration
+      - name: Validate migrations are repeatable
+        run: docker compose run --rm migrate
+      - name: Logs
+        if: always()
+        run: docker compose logs --no-color --tail=200
+      - name: Teardown
+        if: always()
+        run: docker compose down -v

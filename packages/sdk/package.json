@@ -1,0 +1,8 @@
+{
+  "name": "@streamforge/sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "../../dist/packages/sdk/src/index.js",
+  "types": "../../dist/packages/sdk/src/index.d.ts",
+  "private": true
+}

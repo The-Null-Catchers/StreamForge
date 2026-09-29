@@ -1,0 +1,137 @@
+name: streamforge
+x-app: &app
+  env_file: .env
+  restart: unless-stopped
+  init: true
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  networks: [internal]
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: streamforge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
+      POSTGRES_DB: streamforge
+    volumes: [postgres:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U streamforge -d streamforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [internal]
+    restart: unless-stopped
+  redis:
+    image: redis:7.4-alpine
+    command: [redis-server, --appendonly, "yes", --maxmemory-policy, noeviction]
+    volumes: [redis:/data]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [internal]
+    restart: unless-stopped
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    volumes: [minio:/data]
+    networks: [internal]
+    restart: unless-stopped
+  storage-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        until mc alias set local http://minio:9000 "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY"; do sleep 2; done
+        mc mb --ignore-existing "local/$$S3_BUCKET"
+        mc anonymous set none "local/$$S3_BUCKET"
+    depends_on: [minio]
+    networks: [internal]
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports: ["127.0.0.1:8025:8025"]
+    networks: [internal]
+    restart: unless-stopped
+  migrate:
+    <<: *app
+    build: { context: ., dockerfile: infra/docker/Dockerfile, target: api }
+    command: [npm, run, migrate]
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+  api:
+    <<: *app
+    build: { context: ., dockerfile: infra/docker/Dockerfile, target: api }
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      storage-init: { condition: service_completed_successfully }
+      mailpit: { condition: service_started }
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  worker:
+    <<: *app
+    build: { context: ., dockerfile: infra/docker/Dockerfile, target: worker }
+    stop_grace_period: 2h
+    mem_limit: 3g
+    cpus: 2
+    pids_limit: 256
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      storage-init: { condition: service_completed_successfully }
+  web:
+    <<: *app
+    build: { context: ., dockerfile: infra/docker/Dockerfile, target: web }
+    depends_on: [api]
+  caddy:
+    image: caddy:2-alpine
+    ports: ["8080:80"]
+    volumes: ["./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro", "caddy:/data"]
+    depends_on: [web, api]
+    networks: [internal]
+    restart: unless-stopped
+  integration:
+    <<: *app
+    profiles: [test]
+    build: { context: ., dockerfile: infra/docker/Dockerfile, target: worker }
+    command: [npm, run, test:integration]
+    environment:
+      TEST_API_URL: http://api:4000
+      TEST_PUBLIC_URL: http://caddy
+    restart: "no"
+    depends_on:
+      api: { condition: service_healthy }
+      worker: { condition: service_started }
+      caddy: { condition: service_started }
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: [monitoring]
+    volumes:
+      ["./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["127.0.0.1:9090:9090"]
+    networks: [internal]
+networks:
+  internal:
+volumes:
+  postgres:
+  redis:
+  minio:
+  caddy:
