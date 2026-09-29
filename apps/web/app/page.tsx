@@ -36,6 +36,8 @@ type Video = {
   progress: Record<string, number>;
   renditions: { name: string }[];
   error_code?: string;
+  review_status?: "pending" | "approved" | "changes_requested";
+  active_version_id?: string;
 };
 type Workspace = { id: string; name: string; role: string };
 const size = (n: number) =>
@@ -80,6 +82,8 @@ export default function Dashboard() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [chapters, setChapters] = useState<any[]>([]);
   const [playlists, setPlaylists] = useState<any[]>([]);
+  const [versions, setVersions] = useState<any[]>([]);
+  const [reviewComments, setReviewComments] = useState<any[]>([]);
   useEffect(() => {
     setAuthenticated(!!session());
     const q = new URLSearchParams(location.search);
@@ -189,6 +193,22 @@ export default function Dashboard() {
     }
     void api(`/videos/${selected.id}/chapters`)
       .then(setChapters)
+      .catch((e) => setNotice(e.message));
+  }, [selected?.id]);
+  useEffect(() => {
+    if (!selected) {
+      setVersions([]);
+      setReviewComments([]);
+      return;
+    }
+    void Promise.all([
+      api(`/videos/${selected.id}/versions`),
+      api(`/videos/${selected.id}/review-comments`),
+    ])
+      .then(([versionRows, commentRows]) => {
+        setVersions(versionRows);
+        setReviewComments(commentRows);
+      })
       .catch((e) => setNotice(e.message));
   }, [selected?.id]);
   useEffect(() => {
@@ -762,6 +782,202 @@ export default function Dashboard() {
                   <input name="title" maxLength={200} placeholder="Chapter title" required />
                   <button>Add chapter</button>
                 </form>
+              </section>
+              <section className="panel">
+                <h3>Versions & review</h3>
+                <div className="inline-form">
+                  <label>
+                    Review status
+                    <select
+                      value={selected.review_status ?? "pending"}
+                      onChange={async (e) => {
+                        const value = e.target.value as "pending" | "approved" | "changes_requested";
+                        try {
+                          await api(`/videos/${selected.id}/review-status`, {
+                            method: "PUT",
+                            body: JSON.stringify({ status: value }),
+                          });
+                          setSelected({ ...selected, review_status: value });
+                        } catch (err) {
+                          setNotice((err as Error).message);
+                        }
+                      }}
+                    >
+                      <option value="pending">Pending review</option>
+                      <option value="approved">Approved</option>
+                      <option value="changes_requested">Changes requested</option>
+                    </select>
+                  </label>
+                </div>
+
+                {versions.map((version) => (
+                  <div className="resource-row" key={version.id}>
+                    <div>
+                      <strong>v{version.version_number} · {version.label}</strong>
+                      <p>
+                        {version.filename ?? "Processed asset"} · {size(Number(version.size))}
+                        {version.active ? " · Active" : ""}
+                      </p>
+                    </div>
+                    {!version.active && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            await api(
+                              `/videos/${selected.id}/versions/${version.id}/activate`,
+                              { method: "PUT", body: JSON.stringify({}) },
+                            );
+                            const [detail, nextVersions] = await Promise.all([
+                              api(`/videos/${selected.id}`),
+                              api(`/videos/${selected.id}/versions`),
+                            ]);
+                            setSelected(detail);
+                            setVersions(nextVersions);
+                            setNotice(`Version ${version.version_number} is now active.`);
+                          } catch (err) {
+                            setNotice((err as Error).message);
+                          }
+                        }}
+                      >
+                        Make active
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                <form
+                  className="inline-form"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const form = new FormData(e.currentTarget);
+                    try {
+                      await post(`/videos/${selected.id}/versions`, {
+                        sourceVideoId: form.get("sourceVideoId"),
+                        label: form.get("label"),
+                      });
+                      setVersions(await api(`/videos/${selected.id}/versions`));
+                      e.currentTarget.reset();
+                    } catch (err) {
+                      setNotice((err as Error).message);
+                    }
+                  }}
+                >
+                  <select name="sourceVideoId" required defaultValue="">
+                    <option value="" disabled>
+                      Choose a processed replacement video
+                    </option>
+                    {videos
+                      .filter((video) => video.status === "ready" && video.id !== selected.id)
+                      .map((video) => (
+                        <option key={video.id} value={video.id}>
+                          {video.title}
+                        </option>
+                      ))}
+                  </select>
+                  <input name="label" maxLength={200} placeholder="Version label, e.g. Client revision" />
+                  <button>Add version</button>
+                </form>
+
+                <h3>Timestamped comments</h3>
+                <form
+                  className="inline-form"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const form = new FormData(e.currentTarget);
+                    const timestampRaw = String(form.get("timestampSeconds") ?? "").trim();
+                    try {
+                      await post(`/videos/${selected.id}/review-comments`, {
+                        timestampSeconds: timestampRaw ? Number(timestampRaw) : undefined,
+                        body: form.get("body"),
+                      });
+                      setReviewComments(
+                        await api(`/videos/${selected.id}/review-comments`),
+                      );
+                      e.currentTarget.reset();
+                    } catch (err) {
+                      setNotice((err as Error).message);
+                    }
+                  }}
+                >
+                  <input
+                    name="timestampSeconds"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    placeholder="Timestamp seconds (optional)"
+                  />
+                  <input name="body" maxLength={5000} placeholder="Leave review feedback…" required />
+                  <button>Add comment</button>
+                </form>
+
+                {reviewComments.length ? (
+                  reviewComments.map((comment) => (
+                    <div className="resource-row" key={comment.id}>
+                      <div>
+                        <strong>
+                          {comment.timestamp_seconds == null
+                            ? "General"
+                            : time(Number(comment.timestamp_seconds))}
+                          {" · "}
+                          {comment.author_email}
+                          {comment.parent_id ? " · Reply" : ""}
+                          {comment.resolved_at ? " · Resolved" : ""}
+                        </strong>
+                        <p>{comment.body}</p>
+                      </div>
+                      <div>
+                        <button
+                          onClick={async () => {
+                            const body = prompt("Reply");
+                            if (!body) return;
+                            try {
+                              await post(`/videos/${selected.id}/review-comments`, {
+                                versionId: comment.version_id ?? undefined,
+                                parentId: comment.id,
+                                timestampSeconds:
+                                  comment.timestamp_seconds == null
+                                    ? undefined
+                                    : Number(comment.timestamp_seconds),
+                                body,
+                              });
+                              setReviewComments(
+                                await api(`/videos/${selected.id}/review-comments`),
+                              );
+                            } catch (err) {
+                              setNotice((err as Error).message);
+                            }
+                          }}
+                        >
+                          Reply
+                        </button>
+                        <button
+                          onClick={async () => {
+                            try {
+                              await api(
+                                `/videos/${selected.id}/review-comments/${comment.id}`,
+                                {
+                                  method: "PATCH",
+                                  body: JSON.stringify({
+                                    resolved: !comment.resolved_at,
+                                  }),
+                                },
+                              );
+                              setReviewComments(
+                                await api(`/videos/${selected.id}/review-comments`),
+                              );
+                            } catch (err) {
+                              setNotice((err as Error).message);
+                            }
+                          }}
+                        >
+                          {comment.resolved_at ? "Reopen" : "Resolve"}
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p>No review comments yet.</p>
+                )}
               </section>
               <button
                 className="danger"
