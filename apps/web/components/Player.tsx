@@ -35,6 +35,9 @@ export default function Player({
     position: number;
   } | null>(null);
   const cues = useRef<{ start: number; end: number; url: string }[]>([]);
+  const startupStartedAt = useRef(0);
+  const startupSent = useRef(false);
+  const bufferStartedAt = useRef<number | null>(null);
   useEffect(() => {
     let active = true;
     setError("");
@@ -66,13 +69,31 @@ export default function Player({
     if (!data || !video) return;
     let lastTime = Date.now();
     let disposed = false;
-    const send = (event: string, watchSeconds = 0) =>
+    startupStartedAt.current = performance.now();
+    startupSent.current = false;
+    bufferStartedAt.current = null;
+    const currentQuality = () => {
+      const hls = engine.current;
+      if (!hls || hls.currentLevel < 0) return "auto";
+      return hls.levels[hls.currentLevel]?.height
+        ? `${hls.levels[hls.currentLevel]!.height}p`
+        : "auto";
+    };
+    const send = (
+      event: string,
+      watchSeconds = 0,
+      durationMs?: number,
+      qualityValue?: string,
+    ) =>
       void post("/analytics/events", {
         id: crypto.randomUUID(),
         token: data.token,
         event,
         position: video.currentTime || 0,
         watchSeconds,
+        quality: qualityValue ?? currentQuality(),
+        durationMs:
+          durationMs === undefined ? undefined : Math.max(0, Math.round(durationMs)),
       }).catch(() => {});
     if (Hls.isSupported()) {
       const hls = new Hls();
@@ -88,7 +109,10 @@ export default function Player({
             "Playback failed. The link may have expired; retry to refresh it.",
           );
       });
-      hls.on(Hls.Events.LEVEL_SWITCHED, () => send("quality_change"));
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_event, details) => {
+        const height = hls.levels[details.level]?.height;
+        send("quality_change", 0, undefined, height ? `${height}p` : "auto");
+      });
     } else if (video.canPlayType("application/vnd.apple.mpegurl"))
       video.src = data.url;
     else setError("This browser does not support HLS playback.");
@@ -111,11 +135,20 @@ export default function Player({
       seeked: () => send("seek"),
       waiting: () => {
         setBuffering(true);
+        if (bufferStartedAt.current === null)
+          bufferStartedAt.current = performance.now();
         send("buffer_start");
       },
       playing: () => {
         setBuffering(false);
-        send("buffer_end");
+        if (bufferStartedAt.current !== null) {
+          send("buffer_end", 0, performance.now() - bufferStartedAt.current);
+          bufferStartedAt.current = null;
+        }
+        if (!startupSent.current) {
+          startupSent.current = true;
+          send("startup", 0, performance.now() - startupStartedAt.current);
+        }
       },
       ended: () => send("ended"),
       error: () => send("error"),
@@ -126,7 +159,7 @@ export default function Player({
       const elapsed = Math.min(15, (Date.now() - lastTime) / 1000);
       lastTime = Date.now();
       if (!video.paused && !video.seeking && video.readyState >= 3) {
-        send("heartbeat", elapsed);
+        send("heartbeat", elapsed, undefined, currentQuality());
         if (!sharedToken)
           void api(`/videos/${videoId}/progress`, {
             method: "PUT",
