@@ -820,27 +820,45 @@ export default function Dashboard() {
                       </p>
                     </div>
                     {!version.active && (
-                      <button
-                        onClick={async () => {
-                          try {
-                            await api(
-                              `/videos/${selected.id}/versions/${version.id}/activate`,
-                              { method: "PUT", body: JSON.stringify({}) },
-                            );
-                            const [detail, nextVersions] = await Promise.all([
-                              api(`/videos/${selected.id}`),
-                              api(`/videos/${selected.id}/versions`),
-                            ]);
-                            setSelected(detail);
-                            setVersions(nextVersions);
-                            setNotice(`Version ${version.version_number} is now active.`);
-                          } catch (err) {
-                            setNotice((err as Error).message);
-                          }
-                        }}
-                      >
-                        Make active
-                      </button>
+                      <div>
+                        <button
+                          onClick={async () => {
+                            try {
+                              await api(
+                                `/videos/${selected.id}/versions/${version.id}/activate`,
+                                { method: "PUT", body: JSON.stringify({}) },
+                              );
+                              const [detail, nextVersions] = await Promise.all([
+                                api(`/videos/${selected.id}`),
+                                api(`/videos/${selected.id}/versions`),
+                              ]);
+                              setSelected(detail);
+                              setVersions(nextVersions);
+                              setNotice(`Version ${version.version_number} is now active.`);
+                            } catch (err) {
+                              setNotice((err as Error).message);
+                            }
+                          }}
+                        >
+                          Make active
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`Remove version ${version.version_number} from history?`)) return;
+                            try {
+                              await api(
+                                `/videos/${selected.id}/versions/${version.id}`,
+                                { method: "DELETE" },
+                              );
+                              setVersions(await api(`/videos/${selected.id}/versions`));
+                            } catch (err) {
+                              setNotice((err as Error).message);
+                            }
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     )}
                   </div>
                 ))}
