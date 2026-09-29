@@ -165,18 +165,22 @@ export async function playbackRoutes(app: FastifyInstance) {
           "INSERT INTO subtitles(id,video_id,language,label,object_key,is_default,forced) VALUES($1,$2,$3,$4,$5,$6,$7)",
           [id, v.id, b.language, b.label, key, b.default, b.forced],
         );
-        for (const segment of segments)
-          await client.query(
-            "INSERT INTO transcript_segments(video_id,subtitle_id,language,start_seconds,end_seconds,text) VALUES($1,$2,$3,$4,$5,$6)",
-            [
-              v.id,
-              id,
-              b.language,
-              segment.startSeconds,
-              segment.endSeconds,
-              segment.text,
-            ],
-          );
+        await client.query(
+          `INSERT INTO transcript_segments(
+             video_id,subtitle_id,language,start_seconds,end_seconds,text
+           )
+           SELECT $1,$2,$3,start_seconds,end_seconds,text
+           FROM unnest($4::float8[],$5::float8[],$6::text[])
+             AS cue(start_seconds,end_seconds,text)`,
+          [
+            v.id,
+            id,
+            b.language,
+            segments.map((segment) => segment.startSeconds),
+            segments.map((segment) => segment.endSeconds),
+            segments.map((segment) => segment.text),
+          ],
+        );
       });
       return { id, transcriptSegments: segments.length };
     },
