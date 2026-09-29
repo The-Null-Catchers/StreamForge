@@ -94,8 +94,8 @@ export async function reviewRoutes(app: FastifyInstance) {
                 video.filename,
                 video.checksum,
                 video.size,
-                video.metadata,
-                video.renditions,
+                JSON.stringify(video.metadata),
+                JSON.stringify(video.renditions),
                 a.userId ?? a.keyId,
               ],
             )
@@ -128,8 +128,8 @@ export async function reviewRoutes(app: FastifyInstance) {
               source.filename,
               source.checksum,
               source.size,
-              source.metadata,
-              source.renditions,
+              JSON.stringify(source.metadata),
+              JSON.stringify(source.renditions),
               a.userId ?? a.keyId,
             ],
           )
@@ -204,8 +204,8 @@ export async function reviewRoutes(app: FastifyInstance) {
           version.filename,
           version.checksum,
           version.size,
-          version.metadata,
-          version.renditions,
+          JSON.stringify(version.metadata),
+          JSON.stringify(version.renditions),
           video.id,
         ],
       );
