@@ -246,7 +246,19 @@ export class StreamForge {
       `/videos/${encodeURIComponent(id)}/playback`,
     );
   analytics = (id: string) =>
-    this.request<Record<string, number>>(
-      `/videos/${encodeURIComponent(id)}/analytics`,
+    this.request<{
+      plays: string;
+      unique_viewers: string;
+      watch_seconds: string;
+      completions: string;
+      errors: string;
+      buffer_starts: string;
+      avg_startup_ms: number | null;
+      completion_rate: number;
+      average_watch_percentage: number;
+    }>(`/videos/${encodeURIComponent(id)}/analytics`);
+  realtimeAnalytics = (id: string) =>
+    this.request<{ active_viewers: string; qualities: Record<string, number> }>(
+      `/videos/${encodeURIComponent(id)}/analytics/realtime`,
     );
 }
