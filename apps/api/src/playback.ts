@@ -18,6 +18,36 @@ export async function playbackClaims(token: string) {
     throw new ApiError(401, "INVALID_PLAYBACK_TOKEN");
   }
 }
+
+function coarseClient(userAgent = "") {
+  const ua = userAgent.toLowerCase();
+  const deviceType = /ipad|tablet/.test(ua)
+    ? "tablet"
+    : /mobile|iphone|android/.test(ua)
+      ? "mobile"
+      : "desktop";
+  const browser = /edg\//.test(ua)
+    ? "edge"
+    : /firefox\//.test(ua)
+      ? "firefox"
+      : /chrome\//.test(ua)
+        ? "chrome"
+        : /safari\//.test(ua)
+          ? "safari"
+          : "other";
+  const os = /android/.test(ua)
+    ? "android"
+    : /iphone|ipad|ios/.test(ua)
+      ? "ios"
+      : /windows/.test(ua)
+        ? "windows"
+        : /mac os|macintosh/.test(ua)
+          ? "macos"
+          : /linux/.test(ua)
+            ? "linux"
+            : "other";
+  return { deviceType, browser, os };
+}
 export async function playbackRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>(
     "/api/v1/videos/:id/playback",
@@ -32,10 +62,20 @@ export async function playbackRoutes(app: FastifyInstance) {
       if (!v || v.status !== "ready")
         throw new ApiError(404, "VIDEO_NOT_READY");
       if (v.privacy !== "public") await videoAccess(req, v.id);
+      const client = coarseClient(req.headers["user-agent"]);
       const session = (
         await db.query(
-          `INSERT INTO playback_sessions(video_id,expires_at) VALUES($1,now()+$2*interval '1 second') RETURNING id`,
-          [v.id, config.PLAYBACK_TTL_SECONDS],
+          `INSERT INTO playback_sessions(
+             video_id,expires_at,last_seen_at,device_type,browser,os
+           ) VALUES($1,now()+$2*interval '1 second',now(),$3,$4,$5)
+           RETURNING id`,
+          [
+            v.id,
+            config.PLAYBACK_TTL_SECONDS,
+            client.deviceType,
+            client.browser,
+            client.os,
+          ],
         )
       ).rows[0];
       const token = await new SignJWT({
@@ -202,22 +242,43 @@ export async function playbackRoutes(app: FastifyInstance) {
           "ended",
           "error",
           "heartbeat",
+          "startup",
         ]),
         position: z.number().min(0).max(86400).default(0),
         watchSeconds: z.number().min(0).max(15).default(0),
+        quality: z.string().regex(/^(auto|[0-9]{3,4}p)$/).optional(),
+        durationMs: z.number().int().min(0).max(300000).optional(),
       })
       .parse(req.body);
     const claims = await playbackClaims(b.token);
-    await db.query(
-      "INSERT INTO analytics_events(id,session_id,video_id,event,position,watch_seconds) SELECT $1,id,video_id,$2,$3,$4 FROM playback_sessions WHERE id=$5 AND expires_at>now() ON CONFLICT DO NOTHING",
-      [
-        b.id,
-        b.event,
-        b.position,
-        b.event === "heartbeat" ? b.watchSeconds : 0,
-        claims.sessionId,
-      ],
-    );
+    await transaction(async (client) => {
+      await client.query(
+        `INSERT INTO analytics_events(
+           id,session_id,video_id,event,position,watch_seconds,quality,duration_ms
+         )
+         SELECT $1,id,video_id,$2,$3,$4,$5,$6
+         FROM playback_sessions
+         WHERE id=$7 AND expires_at>now()
+         ON CONFLICT DO NOTHING`,
+        [
+          b.id,
+          b.event,
+          b.position,
+          b.event === "heartbeat" ? b.watchSeconds : 0,
+          b.quality ?? null,
+          b.durationMs ?? null,
+          claims.sessionId,
+        ],
+      );
+      if (["play", "heartbeat", "quality_change"].includes(b.event))
+        await client.query(
+          `UPDATE playback_sessions
+           SET last_seen_at=now(),
+               current_quality=COALESCE($1,current_quality)
+           WHERE id=$2 AND expires_at>now()`,
+          [b.quality ?? null, claims.sessionId],
+        );
+    });
     return { ok: true };
   });
   app.get<{ Params: { id: string } }>(
@@ -226,10 +287,117 @@ export async function playbackRoutes(app: FastifyInstance) {
       await videoAccess(req, req.params.id, "viewer", "analytics:read");
       return (
         await db.query(
-          `SELECT count(*) FILTER(WHERE event='play') AS plays,count(DISTINCT session_id) AS playback_sessions,coalesce(sum(watch_seconds),0) AS watch_seconds,count(*) FILTER(WHERE event='ended') AS completions,count(*) FILTER(WHERE event='error') AS errors FROM analytics_events WHERE video_id=$1`,
+          `WITH video AS (
+             SELECT COALESCE((metadata->>'duration')::float,0) AS duration
+             FROM videos WHERE id=$1
+           ),
+           per_session AS (
+             SELECT session_id,
+                    max(position) AS max_position,
+                    bool_or(event='ended') AS ended,
+                    bool_or(event='play') AS played
+             FROM analytics_events
+             WHERE video_id=$1
+             GROUP BY session_id
+           ),
+           event_totals AS (
+             SELECT
+               count(*) FILTER(WHERE event='play') AS plays,
+               count(DISTINCT session_id) FILTER(WHERE event='play') AS unique_viewers,
+               coalesce(sum(watch_seconds),0) AS watch_seconds,
+               count(*) FILTER(WHERE event='ended') AS completions,
+               count(*) FILTER(WHERE event='error') AS errors,
+               count(*) FILTER(WHERE event='buffer_start') AS buffer_events,
+               coalesce(sum(duration_ms) FILTER(WHERE event='buffer_end'),0) AS buffering_ms,
+               coalesce(avg(duration_ms) FILTER(WHERE event='startup'),0) AS average_startup_ms
+             FROM analytics_events
+             WHERE video_id=$1
+           )
+           SELECT
+             e.*,
+             CASE WHEN e.unique_viewers=0 THEN 0
+               ELSE round((e.completions::numeric/e.unique_viewers)*100,2)
+             END AS completion_rate,
+             CASE WHEN v.duration<=0 THEN 0
+               ELSE round(coalesce(avg(least(1,p.max_position/v.duration))*100,0)::numeric,2)
+             END AS average_watch_percentage,
+             CASE WHEN (e.watch_seconds + e.buffering_ms/1000.0)<=0 THEN 0
+               ELSE round(
+                 ((e.buffering_ms/1000.0)/(e.watch_seconds + e.buffering_ms/1000.0)*100)::numeric,
+                 2
+               )
+             END AS buffering_ratio,
+             CASE WHEN e.unique_viewers=0 THEN 0
+               ELSE round((e.errors::numeric/e.unique_viewers)*100,2)
+             END AS error_rate
+           FROM event_totals e
+           CROSS JOIN video v
+           LEFT JOIN per_session p ON true
+           GROUP BY e.plays,e.unique_viewers,e.watch_seconds,e.completions,e.errors,
+                    e.buffer_events,e.buffering_ms,e.average_startup_ms,v.duration`,
           [req.params.id],
         )
       ).rows[0];
     },
+  app.get<{ Params: { id: string } }>(
+    "/api/v1/videos/:id/analytics/realtime",
+    async (req) => {
+      await videoAccess(req, req.params.id, "viewer", "analytics:read");
+      const active = await db.query(
+        `SELECT
+           count(*) AS active_viewers,
+           jsonb_object_agg(quality,count) FILTER(WHERE quality IS NOT NULL) AS qualities
+         FROM (
+           SELECT COALESCE(current_quality,'auto') AS quality,count(*) AS count
+           FROM playback_sessions
+           WHERE video_id=$1
+             AND expires_at>now()
+             AND last_seen_at>now()-interval '30 seconds'
+           GROUP BY COALESCE(current_quality,'auto')
+         ) q`,
+        [req.params.id],
+      );
+      const devices = await db.query(
+        `SELECT device_type,count(*) AS viewers
+         FROM playback_sessions
+         WHERE video_id=$1
+           AND expires_at>now()
+           AND last_seen_at>now()-interval '30 seconds'
+         GROUP BY device_type
+         ORDER BY viewers DESC`,
+        [req.params.id],
+      );
+      return {
+        activeViewers: Number(active.rows[0]?.active_viewers ?? 0),
+        qualities: active.rows[0]?.qualities ?? {},
+        devices: devices.rows,
+      };
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    "/api/v1/videos/:id/analytics/daily",
+    async (req) => {
+      await videoAccess(req, req.params.id, "viewer", "analytics:read");
+      return (
+        await db.query(
+          `SELECT
+             created_at::date AS date,
+             count(*) FILTER(WHERE event='play') AS plays,
+             count(DISTINCT session_id) FILTER(WHERE event='play') AS unique_viewers,
+             coalesce(sum(watch_seconds),0) AS watch_seconds,
+             count(*) FILTER(WHERE event='ended') AS completions,
+             count(*) FILTER(WHERE event='error') AS errors,
+             coalesce(sum(duration_ms) FILTER(WHERE event='buffer_end'),0) AS buffering_ms
+           FROM analytics_events
+           WHERE video_id=$1
+           GROUP BY created_at::date
+           ORDER BY date DESC
+           LIMIT 90`,
+          [req.params.id],
+        )
+      ).rows;
+    },
+  );
   );
 }
