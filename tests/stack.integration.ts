@@ -18,7 +18,7 @@ async function request(
   const r = await fetch(base + path, {
     method,
     headers: {
-      "Content-Type": "application/json",
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
@@ -190,6 +190,137 @@ test(
         await new Promise((r) => setTimeout(r, 1500));
       }
       assert.ok(ready, "video became ready");
+      const readyRow = (
+        await db.query(
+          "SELECT * FROM videos WHERE id=$1",
+          [v.id],
+        )
+      ).rows[0];
+      const replacementId = randomUUID();
+      await db.query(
+        `INSERT INTO videos(
+           id,workspace_id,title,description,tags,filename,privacy,status,progress,
+           metadata,renditions,source_key,output_prefix,checksum,size,created_at,updated_at
+         ) VALUES($1,$2,$3,'','{}',$4,'private','ready','{}',$5,$6,$7,$8,$9,$10,now(),now())`,
+        [
+          replacementId,
+          ws.id,
+          "Replacement source",
+          readyRow.filename,
+          JSON.stringify(readyRow.metadata),
+          JSON.stringify(readyRow.renditions),
+          readyRow.source_key,
+          readyRow.output_prefix,
+          readyRow.checksum,
+          readyRow.size,
+        ],
+      );
+
+      const versionCreate = await request(
+        `/api/v1/videos/${v.id}/versions`,
+        "POST",
+        { sourceVideoId: replacementId, label: "Client revision" },
+      );
+      assert.equal(versionCreate.status, 201, JSON.stringify(versionCreate.body));
+      assert.equal(versionCreate.body.version_number, 2);
+      const versions = await request(`/api/v1/videos/${v.id}/versions`);
+      assert.equal(versions.status, 200);
+      assert.equal(versions.body.length, 2);
+      const baseline = versions.body.find((x: any) => x.version_number === 1);
+      assert.ok(baseline?.active);
+      assert.equal(
+        (
+          await request(
+            `/api/v1/videos/${v.id}/versions/${versionCreate.body.id}/activate`,
+            "PUT",
+            {},
+          )
+        ).status,
+        200,
+      );
+      const activatedVersions = await request(`/api/v1/videos/${v.id}/versions`);
+      assert.equal(
+        activatedVersions.body.find((x: any) => x.id === versionCreate.body.id)?.active,
+        true,
+      );
+      assert.equal(
+        (await request(`/api/v1/videos/${replacementId}`, "DELETE")).status,
+        409,
+      );
+      assert.equal(
+        (
+          await request(
+            `/api/v1/videos/${v.id}/versions/${versionCreate.body.id}`,
+            "DELETE",
+          )
+        ).status,
+        409,
+      );
+      assert.equal(
+        (
+          await request(
+            `/api/v1/videos/${v.id}/versions/${baseline.id}/activate`,
+            "PUT",
+            {},
+          )
+        ).status,
+        200,
+      );
+      assert.equal(
+        (
+          await request(
+            `/api/v1/videos/${v.id}/versions/${versionCreate.body.id}`,
+            "DELETE",
+          )
+        ).status,
+        200,
+      );
+
+      const reviewComment = await request(
+        `/api/v1/videos/${v.id}/review-comments`,
+        "POST",
+        { timestampSeconds: 2.5, body: "Tighten this transition." },
+      );
+      assert.equal(reviewComment.status, 201, JSON.stringify(reviewComment.body));
+      const replyComment = await request(
+        `/api/v1/videos/${v.id}/review-comments`,
+        "POST",
+        {
+          parentId: reviewComment.body.id,
+          versionId: baseline.id,
+          timestampSeconds: 2.5,
+          body: "Updated in the next cut.",
+        },
+      );
+      assert.equal(replyComment.status, 201, JSON.stringify(replyComment.body));
+      assert.equal(
+        (
+          await request(
+            `/api/v1/videos/${v.id}/review-comments/${reviewComment.body.id}`,
+            "PATCH",
+            { resolved: true },
+          )
+        ).status,
+        200,
+      );
+      const comments = await request(`/api/v1/videos/${v.id}/review-comments`);
+      assert.equal(comments.body.length, 2);
+      assert.ok(
+        comments.body.find((x: any) => x.id === reviewComment.body.id)?.resolved_at,
+      );
+      assert.equal(
+        (
+          await request(`/api/v1/videos/${v.id}/review-status`, "PUT", {
+            status: "changes_requested",
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (await request(`/api/v1/videos/${v.id}`)).body.review_status,
+        "changes_requested",
+      );
+
       const playback = (await request(`/api/v1/videos/${v.id}/playback`)).body;
       const masterPath =
         new URL(playback.url).pathname + new URL(playback.url).search;

@@ -117,6 +117,17 @@ export async function videoRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>("/api/v1/videos/:id", async (req) => {
     const v = await videoAccess(req, req.params.id, "editor", "videos:write");
     const a = await access(req, v.workspace_id, "editor", "videos:write");
+    const refs = await db.query(
+      `SELECT 1
+       FROM video_versions vv
+       JOIN videos owner ON owner.id=vv.video_id
+       WHERE vv.source_video_id=$1
+         AND vv.video_id<>$1
+         AND owner.deleted_at IS NULL
+       LIMIT 1`,
+      [v.id],
+    );
+    if (refs.rowCount) throw new ApiError(409, "VERSION_SOURCE_IN_USE");
     await transaction(async (c) => {
       await c.query(
         "UPDATE videos SET status='deleted',deleted_at=now() WHERE id=$1",

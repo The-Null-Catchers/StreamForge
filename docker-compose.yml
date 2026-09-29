@@ -80,6 +80,7 @@ services:
       retries: 12
   worker:
     <<: *app
+    image: streamforge-worker:local
     build: { context: ., dockerfile: infra/docker/Dockerfile, target: worker }
     stop_grace_period: 2h
     mem_limit: 3g
@@ -103,7 +104,7 @@ services:
   integration:
     <<: *app
     profiles: [test]
-    build: { context: ., dockerfile: infra/docker/Dockerfile, target: worker }
+    image: streamforge-worker:local
     command: [npm, run, test:integration]
     environment:
       TEST_API_URL: http://api:4000

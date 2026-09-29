@@ -26,6 +26,34 @@ export type Playlist = {
   item_count?: number;
   items?: Array<Video & { position: number }>;
 };
+export type VideoVersion = {
+  id: string;
+  version_number: number;
+  label: string;
+  source_video_id?: string;
+  filename?: string;
+  checksum?: string;
+  size: number;
+  metadata?: Record<string, unknown>;
+  renditions: unknown[];
+  created_by: string;
+  created_at: string;
+  active?: boolean;
+};
+export type ReviewComment = {
+  id: string;
+  video_id: string;
+  version_id?: string;
+  parent_id?: string;
+  author_id: string;
+  author_email?: string;
+  timestamp_seconds?: number;
+  body: string;
+  resolved_at?: string;
+  resolved_by?: string;
+  created_at: string;
+  updated_at: string;
+};
 export class StreamForge {
   constructor(private options: { apiKey: string; baseUrl?: string }) {}
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -67,6 +95,54 @@ export class StreamForge {
         this.request(`/videos/${encodeURIComponent(id)}/chapters`, {
           method: "PUT",
           body: JSON.stringify({ chapters }),
+        }),
+    },
+    versions: {
+      list: (id: string) =>
+        this.request<VideoVersion[]>(`/videos/${encodeURIComponent(id)}/versions`),
+      create: (id: string, input: { sourceVideoId: string; label?: string }) =>
+        this.request<VideoVersion>(`/videos/${encodeURIComponent(id)}/versions`, {
+          method: "POST",
+          body: JSON.stringify(input),
+        }),
+      activate: (id: string, versionId: string) =>
+        this.request(`/videos/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}/activate`, {
+          method: "PUT",
+          body: JSON.stringify({}),
+        }),
+      delete: (id: string, versionId: string) =>
+        this.request(`/videos/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}`, {
+          method: "DELETE",
+        }),
+    },
+    review: {
+      comments: (id: string) =>
+        this.request<ReviewComment[]>(`/videos/${encodeURIComponent(id)}/review-comments`),
+      comment: (
+        id: string,
+        input: {
+          versionId?: string;
+          parentId?: string;
+          timestampSeconds?: number;
+          body: string;
+        },
+      ) =>
+        this.request<ReviewComment>(`/videos/${encodeURIComponent(id)}/review-comments`, {
+          method: "POST",
+          body: JSON.stringify(input),
+        }),
+      resolve: (id: string, commentId: string, resolved = true) =>
+        this.request(`/videos/${encodeURIComponent(id)}/review-comments/${encodeURIComponent(commentId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ resolved }),
+        }),
+      setStatus: (
+        id: string,
+        status: "pending" | "approved" | "changes_requested",
+      ) =>
+        this.request(`/videos/${encodeURIComponent(id)}/review-status`, {
+          method: "PUT",
+          body: JSON.stringify({ status }),
         }),
     },
   };
