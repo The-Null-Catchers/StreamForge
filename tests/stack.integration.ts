@@ -340,16 +340,30 @@ test(
         .split("\n")
         .find((x) => x.startsWith("segment-"))!;
       assert.equal((await fetch(new URL(segment, variantUrl))).status, 200);
-      assert.equal(
-        (
-          await request(`/api/v1/videos/${v.id}/subtitles`, "POST", {
-            language: "ar",
-            label: "العربية",
-            content: "1\n00:00:00,000 --> 00:00:01,000\nمرحبا",
-          })
-        ).status,
-        200,
+      const subtitleUpload = await request(
+        `/api/v1/videos/${v.id}/subtitles`,
+        "POST",
+        {
+          language: "ar",
+          label: "العربية",
+          content:
+            "1\n00:00:00,000 --> 00:00:01,000\nمرحبا بالعالم\n\n2\n00:00:02,000 --> 00:00:03,500\nتجربة البحث",
+        },
       );
+      assert.equal(subtitleUpload.status, 200, JSON.stringify(subtitleUpload.body));
+      assert.equal(subtitleUpload.body.transcriptSegments, 2);
+      const transcriptSearch = await request(
+        `/api/v1/videos/${v.id}/transcript?search=${encodeURIComponent("البحث")}`,
+      );
+      assert.equal(transcriptSearch.status, 200);
+      assert.equal(transcriptSearch.body.items.length, 1);
+      assert.equal(transcriptSearch.body.items[0].text, "تجربة البحث");
+      const workspaceTranscriptSearch = await request(
+        `/api/v1/transcripts/search?workspaceId=${ws.id}&q=${encodeURIComponent("مرحبا")}`,
+      );
+      assert.equal(workspaceTranscriptSearch.status, 200);
+      assert.equal(workspaceTranscriptSearch.body.length, 1);
+      assert.equal(workspaceTranscriptSearch.body[0].video_id, v.id);
       const chapterUpdate = await request(
         `/api/v1/videos/${v.id}/chapters`,
         "PUT",
