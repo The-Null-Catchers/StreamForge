@@ -88,3 +88,38 @@ Ordered playlist membership is replaced atomically:
 ```
 
 Every referenced video must be active and belong to the playlist workspace. Duplicate video IDs are rejected. Playlist deletion never deletes videos.
+
+
+## Video versions
+
+- `GET /api/v1/videos/:id/versions`
+- `POST /api/v1/videos/:id/versions`
+- `PUT /api/v1/videos/:id/versions/:versionId/activate`
+
+Creating a version snapshots a processed replacement video's storage pointers and media metadata into the logical video's version history. The current asset is preserved as the initial version before the first replacement. Replacement media must be ready and belong to the same workspace.
+
+```json
+{
+  "sourceVideoId": "processed-video-uuid",
+  "label": "Client revision"
+}
+```
+
+Activating a version switches the logical video's playback asset pointers back to that snapshot without changing the logical video ID.
+
+## Review workflow
+
+- `GET /api/v1/videos/:id/review-comments`
+- `POST /api/v1/videos/:id/review-comments`
+- `PATCH /api/v1/videos/:id/review-comments/:commentId`
+- `PUT /api/v1/videos/:id/review-status`
+
+Comments can be general or timestamped, can target a specific version, and can reply to an existing comment. Editors can resolve or reopen comments.
+
+Review status values:
+
+```text
+pending
+approved
+changes_requested
+```
