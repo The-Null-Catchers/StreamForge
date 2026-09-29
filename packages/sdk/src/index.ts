@@ -40,6 +40,16 @@ export type VideoVersion = {
   created_at: string;
   active?: boolean;
 };
+export type TranscriptSegment = {
+  id: string;
+  video_id: string;
+  subtitle_id: string;
+  language: string;
+  start_seconds: number;
+  end_seconds: number;
+  text: string;
+  title?: string;
+};
 export type ReviewComment = {
   id: string;
   video_id: string;
@@ -115,6 +125,19 @@ export class StreamForge {
           method: "DELETE",
         }),
     },
+    transcript: (
+      id: string,
+      options: { search?: string; language?: string; limit?: number; offset?: number } = {},
+    ) => {
+      const q = new URLSearchParams();
+      if (options.search) q.set("search", options.search);
+      if (options.language) q.set("language", options.language);
+      if (options.limit) q.set("limit", String(options.limit));
+      if (options.offset) q.set("offset", String(options.offset));
+      return this.request<{ items: TranscriptSegment[]; limit: number; offset: number }>(
+        `/videos/${encodeURIComponent(id)}/transcript?${q}`,
+      );
+    },
     review: {
       comments: (id: string) =>
         this.request<ReviewComment[]>(`/videos/${encodeURIComponent(id)}/review-comments`),
@@ -144,6 +167,20 @@ export class StreamForge {
           method: "PUT",
           body: JSON.stringify({ status }),
         }),
+    },
+  };
+  transcripts = {
+    search: (
+      workspaceId: string,
+      q: string,
+      options: { language?: string; limit?: number } = {},
+    ) => {
+      const params = new URLSearchParams({ workspaceId, q });
+      if (options.language) params.set("language", options.language);
+      if (options.limit) params.set("limit", String(options.limit));
+      return this.request<TranscriptSegment[]>(
+        `/transcripts/search?${params}`,
+      );
     },
   };
   playlists = {
