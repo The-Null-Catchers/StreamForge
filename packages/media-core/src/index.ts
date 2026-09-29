@@ -331,6 +331,62 @@ export function subtitleVtt(input: string) {
     throw Error("INVALID_SUBTITLE");
   return "WEBVTT\n\n" + converted;
 }
+export type TranscriptSegment = {
+  startSeconds: number;
+  endSeconds: number;
+  text: string;
+};
+
+function cueSeconds(value: string) {
+  const parts = value.trim().split(":");
+  if (parts.length < 2 || parts.length > 3) throw Error("INVALID_SUBTITLE");
+  const seconds = Number(parts.pop());
+  const minutes = Number(parts.pop());
+  const hours = parts.length ? Number(parts.pop()) : 0;
+  if (
+    !Number.isFinite(seconds) ||
+    !Number.isFinite(minutes) ||
+    !Number.isFinite(hours) ||
+    seconds < 0 ||
+    minutes < 0 ||
+    hours < 0
+  )
+    throw Error("INVALID_SUBTITLE");
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+export function subtitleSegments(input: string): TranscriptSegment[] {
+  const normalized = subtitleVtt(input).replace(/\r\n/g, "\n");
+  const segments: TranscriptSegment[] = [];
+  for (const block of normalized.split(/\n{2,}/)) {
+    const lines = block
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const timingIndex = lines.findIndex((line) => line.includes("-->"));
+    if (timingIndex < 0) continue;
+    const [rawStart, rawEndWithSettings] = lines[timingIndex]!.split("-->");
+    if (!rawStart || !rawEndWithSettings) throw Error("INVALID_SUBTITLE");
+    const rawEnd = rawEndWithSettings.trim().split(/\s+/)[0]!;
+    const startSeconds = cueSeconds(rawStart);
+    const endSeconds = cueSeconds(rawEnd);
+    if (endSeconds < startSeconds) throw Error("INVALID_SUBTITLE");
+    const text = lines
+      .slice(timingIndex + 1)
+      .join(" ")
+      .replace(/<[^>]*>/g, "")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (text) segments.push({ startSeconds, endSeconds, text });
+  }
+  if (!segments.length) throw Error("INVALID_SUBTITLE");
+  return segments;
+}
+
 export async function validateHls(output: string, variants: Rendition[]) {
   const master = await readFile(join(output, "master.m3u8"), "utf8");
   if (!master.startsWith("#EXTM3U")) throw Error("INVALID_MASTER");
