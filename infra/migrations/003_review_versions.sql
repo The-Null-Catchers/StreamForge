@@ -43,3 +43,21 @@ CREATE INDEX review_comments_video_created
 
 CREATE INDEX review_comments_version_created
   ON review_comments(version_id, created_at, id);
+
+INSERT INTO video_versions(
+  video_id,version_number,label,source_video_id,source_key,output_prefix,filename,
+  checksum,size,metadata,renditions,created_by,created_at
+)
+SELECT
+  v.id,1,'Initial version',v.id,v.source_key,v.output_prefix,v.filename,
+  v.checksum,v.size,v.metadata,v.renditions,'migration',v.created_at
+FROM videos v
+WHERE v.deleted_at IS NULL
+ON CONFLICT(video_id,version_number) DO NOTHING;
+
+UPDATE videos v
+SET active_version_id=vv.id
+FROM video_versions vv
+WHERE vv.video_id=v.id
+  AND vv.version_number=1
+  AND v.active_version_id IS NULL;
