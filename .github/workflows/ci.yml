@@ -29,6 +29,17 @@ jobs:
       - uses: actions/checkout@v4
       - run: cp .env.example .env
       - run: docker compose up -d --build
+      - name: Wait for API health
+        run: |
+          for attempt in {1..60}; do
+            status="$(docker inspect --format='{{.State.Health.Status}}' "$(docker compose ps -q api)" 2>/dev/null || true)"
+            if [ "$status" = "healthy" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          exit 1
       - run: docker compose run --rm --no-deps integration
       - name: Validate migrations are repeatable
         run: docker compose run --rm migrate
