@@ -261,4 +261,21 @@ export class StreamForge {
     this.request<{ active_viewers: string; qualities: Record<string, number> }>(
       `/videos/${encodeURIComponent(id)}/analytics/realtime`,
     );
+  dailyAnalytics = (id: string, days = 30) =>
+    this.request<
+      Array<{
+        day: string;
+        plays: string;
+        unique_viewers: string;
+        watch_seconds: number;
+        completions: string;
+        errors: string;
+        buffer_starts: string;
+        buffer_seconds: number;
+        avg_startup_ms: number | null;
+        buffering_ratio: number;
+      }>
+    >(
+      `/videos/${encodeURIComponent(id)}/analytics/daily?days=${encodeURIComponent(String(days))}`,
+    );
 }
