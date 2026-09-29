@@ -1,11 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { SignJWT, jwtVerify } from "jose";
 import { z } from "zod";
-import { db } from "../../../packages/shared/src/db.js";
+import { db, transaction } from "../../../packages/shared/src/db.js";
 import { storage } from "../../../packages/shared/src/storage.js";
 import { config } from "../../../packages/config/src/index.js";
 import { videoAccess, ApiError, uuid, playbackSecret } from "./context.js";
-import { subtitleVtt } from "../../../packages/media-core/src/index.js";
+import { subtitleVtt, subtitleSegments } from "../../../packages/media-core/src/index.js";
 export async function playbackClaims(token: string) {
   try {
     return (
@@ -159,11 +159,26 @@ export async function playbackRoutes(app: FastifyInstance) {
       }
       const key = `workspaces/${v.workspace_id}/videos/${v.id}/subtitles/${id}.vtt`;
       await storage.put(key, Buffer.from(converted), "text/vtt");
-      await db.query(
-        "INSERT INTO subtitles(id,video_id,language,label,object_key,is_default,forced) VALUES($1,$2,$3,$4,$5,$6,$7)",
-        [id, v.id, b.language, b.label, key, b.default, b.forced],
-      );
-      return { id };
+      const segments = subtitleSegments(converted);
+      await transaction(async (client) => {
+        await client.query(
+          "INSERT INTO subtitles(id,video_id,language,label,object_key,is_default,forced) VALUES($1,$2,$3,$4,$5,$6,$7)",
+          [id, v.id, b.language, b.label, key, b.default, b.forced],
+        );
+        for (const segment of segments)
+          await client.query(
+            "INSERT INTO transcript_segments(video_id,subtitle_id,language,start_seconds,end_seconds,text) VALUES($1,$2,$3,$4,$5,$6)",
+            [
+              v.id,
+              id,
+              b.language,
+              segment.startSeconds,
+              segment.endSeconds,
+              segment.text,
+            ],
+          );
+      });
+      return { id, transcriptSegments: segments.length };
     },
   );
   app.post("/api/v1/analytics/events", async (req) => {
