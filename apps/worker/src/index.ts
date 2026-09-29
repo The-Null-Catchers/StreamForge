@@ -11,6 +11,7 @@ import { enqueue, event } from "../../../packages/shared/src/events.js";
 import { config } from "../../../packages/config/src/index.js";
 import { mediaJob } from "./pipeline.js";
 import { deliver } from "./webhooks.js";
+import { rollupAnalytics } from "./analytics.js";
 const logger = pino();
 const workerId = randomUUID();
 let stopping = false;
@@ -21,6 +22,7 @@ const names: QueueName[] = [
   "thumbnail-generation",
   "hls-packaging",
   "webhooks",
+  "analytics",
   "cleanup",
 ];
 const workers = names.map((name) => {
@@ -32,6 +34,8 @@ const workers = names.map((name) => {
         "job started",
       );
       if (name === "webhooks") await deliver(job.data.deliveryId);
+      else if (name === "analytics")
+        await rollupAnalytics(job.data.videoId, job.data.day);
       else await mediaJob(job);
     },
     {
@@ -47,7 +51,10 @@ const workers = names.map((name) => {
     logger.error({ jobId: job?.id, workerId, err: error }, "job failed");
     if (!job || job.attemptsMade < (job.opts.attempts ?? 1)) return;
     void transaction(async (c) => {
-      if (job.data.videoId && name !== "cleanup") {
+      if (
+        job.data.videoId &&
+        !["cleanup", "analytics", "webhooks"].includes(name)
+      ) {
         await c.query(
           "UPDATE processing_jobs SET status='dead_letter',error_code='PROCESSING_FAILED' WHERE id=$1",
           [job.id],
