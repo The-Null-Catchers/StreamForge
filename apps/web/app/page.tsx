@@ -92,6 +92,7 @@ export default function Dashboard() {
   const [versions, setVersions] = useState<any[]>([]);
   const [reviewComments, setReviewComments] = useState<any[]>([]);
   const [transcriptResults, setTranscriptResults] = useState<any[]>([]);
+  const [transcriptions, setTranscriptions] = useState<any[]>([]);
   useEffect(() => {
     setAuthenticated(!!session());
     const q = new URLSearchParams(location.search);
@@ -223,15 +224,18 @@ export default function Dashboard() {
       setVersions([]);
       setReviewComments([]);
       setTranscriptResults([]);
+      setTranscriptions([]);
       return;
     }
     void Promise.all([
       api(`/videos/${selected.id}/versions`),
       api(`/videos/${selected.id}/review-comments`),
+      api(`/videos/${selected.id}/transcriptions`),
     ])
-      .then(([versionRows, commentRows]) => {
+      .then(([versionRows, commentRows, transcriptionRows]) => {
         setVersions(versionRows);
         setReviewComments(commentRows);
+        setTranscriptions(transcriptionRows);
       })
       .catch((e) => setNotice(e.message));
   }, [selected?.id]);
@@ -830,6 +834,61 @@ export default function Dashboard() {
                   <input name="file" type="file" accept=".srt,.vtt" required />
                   <button>Upload subtitles</button>
                 </form>
+              </section>
+              <section className="panel">
+                <h3>Automatic transcription</h3>
+                <p>
+                  Generate searchable subtitles from the source audio using the
+                  configured Whisper-compatible provider.
+                </p>
+                <form
+                  className="inline-form"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const form = new FormData(e.currentTarget);
+                    const language = String(form.get("language") ?? "auto");
+                    try {
+                      await api(`/videos/${selected.id}/transcriptions`, {
+                        method: "POST",
+                        body: JSON.stringify({ language }),
+                      });
+                      setTranscriptions(
+                        await api(`/videos/${selected.id}/transcriptions`),
+                      );
+                      setNotice("Transcription queued.");
+                    } catch (err) {
+                      setNotice((err as Error).message);
+                    }
+                  }}
+                >
+                  <select name="language" defaultValue="auto">
+                    <option value="auto">Auto detect</option>
+                    <option value="ar">Arabic</option>
+                    <option value="en">English</option>
+                  </select>
+                  <button disabled={selected.status !== "ready"}>
+                    Generate transcript
+                  </button>
+                </form>
+                {transcriptions.length ? (
+                  transcriptions.map((job) => (
+                    <div className="resource-row" key={job.id}>
+                      <div>
+                        <strong>
+                          {job.language.toUpperCase()} · {job.status}
+                        </strong>
+                        <p>
+                          {job.status === "failed"
+                            ? job.error_code || "Transcription failed"
+                            : `${job.progress}% · ${job.model}`}
+                        </p>
+                      </div>
+                      {job.subtitle_id && <span className="badge ready">Ready</span>}
+                    </div>
+                  ))
+                ) : (
+                  <p>No automatic transcription jobs yet.</p>
+                )}
               </section>
               <section className="panel">
                 <h3>Search transcript</h3>
