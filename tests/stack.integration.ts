@@ -18,7 +18,7 @@ async function request(
   const r = await fetch(base + path, {
     method,
     headers: {
-      "Content-Type": "application/json",
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
