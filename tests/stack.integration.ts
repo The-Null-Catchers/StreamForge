@@ -467,9 +467,33 @@ test(
         token: playback.token,
         event: "play",
         position: 0,
+        startupMs: 180,
+      });
+      await request("/api/v1/analytics/events", "POST", {
+        id: randomUUID(),
+        token: playback.token,
+        event: "quality_change",
+        position: 1,
+        quality: "720p",
+      });
+      await request("/api/v1/analytics/events", "POST", {
+        id: randomUUID(),
+        token: playback.token,
+        event: "heartbeat",
+        position: 5,
+        watchSeconds: 5,
       });
       const analytics = await request(`/api/v1/videos/${v.id}/analytics`);
       assert.equal(Number(analytics.body.plays), 1);
+      assert.equal(Number(analytics.body.unique_viewers), 1);
+      assert.equal(Number(analytics.body.watch_seconds), 5);
+      assert.equal(Number(analytics.body.avg_startup_ms), 180);
+      assert.ok(Number(analytics.body.average_watch_percentage) > 0);
+      const realtime = await request(
+        `/api/v1/videos/${v.id}/analytics/realtime`,
+      );
+      assert.equal(Number(realtime.body.active_viewers), 1);
+      assert.equal(Number(realtime.body.qualities["720p"]), 1);
       const key = (
         await request("/api/v1/api-keys", "POST", {
           workspaceId: ws.id,
