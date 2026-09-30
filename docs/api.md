@@ -171,3 +171,54 @@ Provider configuration:
 - `TRANSCRIPTION_CHUNK_SECONDS=600`
 
 The worker extracts mono 16 kHz audio with FFmpeg, chunks long media before provider calls, merges timestamps, generates WebVTT, and persists the subtitle/transcript atomically.
+
+
+## AI media helpers
+
+AI helpers use the existing indexed transcript as their only content source. They can generate a summary, metadata suggestions, chapter suggestions, or all of them together.
+
+Start a generation:
+
+`POST /api/v1/videos/:id/ai-generations`
+
+Example:
+
+```json
+{
+  "kind": "all",
+  "language": "auto"
+}
+```
+
+Supported kinds are `summary`, `metadata`, `chapters`, and `all`. Supported language modes are `auto`, `ar`, and `en`.
+
+List recent generations:
+
+`GET /api/v1/videos/:id/ai-generations`
+
+Read one generation:
+
+`GET /api/v1/videos/:id/ai-generations/:generationId`
+
+Apply a completed generation explicitly:
+
+`POST /api/v1/videos/:id/ai-generations/:generationId/apply`
+
+```json
+{
+  "metadata": true,
+  "chapters": true
+}
+```
+
+Generation never changes the video automatically. Metadata and chapters are only written after the explicit apply request.
+
+Provider configuration:
+
+- `AI_PROVIDER=openai-compatible`
+- `AI_BASE_URL=https://api.openai.com/v1`
+- `AI_API_KEY=...`
+- `AI_MODEL=gpt-4.1-mini`
+- `AI_MAX_TRANSCRIPT_CHARS=60000`
+
+Jobs are dispatched through the durable outbox to the dedicated `ai` BullMQ queue. AI failures are isolated from the media processing lifecycle and never mark the underlying video as failed.
