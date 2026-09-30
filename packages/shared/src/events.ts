@@ -8,8 +8,9 @@ export async function enqueue(c: PoolClient, queue: string, payload: unknown) {
 export async function event(
   c: PoolClient,
   workspace: string,
-  video: string,
+  target: string,
   name: string,
+  targetKey: "videoId" | "streamId" = "videoId",
 ) {
   const hooks = await c.query(
     "SELECT id FROM webhooks WHERE workspace_id=$1 AND enabled",
@@ -21,7 +22,11 @@ export async function event(
       [
         hook.id,
         name,
-        JSON.stringify({ event: name, videoId: video, workspaceId: workspace }),
+        JSON.stringify({
+          event: name,
+          [targetKey]: target,
+          workspaceId: workspace,
+        }),
       ],
     );
     await enqueue(c, "webhooks", { deliveryId: d.rows[0].id });
