@@ -7,7 +7,6 @@ import { hash, opaque } from "../../../packages/shared/src/security.js";
 import { config } from "../../../packages/config/src/index.js";
 import {
   access,
-  actor,
   audit,
   ApiError,
   playbackSecret,
