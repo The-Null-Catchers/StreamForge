@@ -103,6 +103,7 @@ export async function liveRoutes(app: FastifyInstance) {
               locked.workspace_id,
               stream.id,
               "live.started",
+              "streamId",
             );
           }
         });
