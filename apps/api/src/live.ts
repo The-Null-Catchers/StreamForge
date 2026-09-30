@@ -136,7 +136,6 @@ export async function liveRoutes(app: FastifyInstance) {
       .object({
         workspaceId: uuid,
         name: z.string().trim().min(1).max(200),
-        recordingEnabled: z.boolean().default(true),
       })
       .parse(req.body);
     const a = await access(req, body.workspaceId, "editor", "videos:write");
@@ -155,7 +154,7 @@ export async function liveRoutes(app: FastifyInstance) {
           body.name,
           path,
           hash(key),
-          body.recordingEnabled,
+          true,
           a.userId ?? null,
         ],
       )
