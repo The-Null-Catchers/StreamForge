@@ -1,0 +1,32 @@
+logLevel: info
+logStructured: true
+
+api: true
+apiAddress: :9997
+
+authMethod: http
+authHTTPAddress: http://api:4000/api/v1/live/auth
+authHTTPExclude:
+  - action: api
+  - action: metrics
+  - action: pprof
+
+rtsp: false
+rtmp: true
+rtmpAddress: :1935
+hls: true
+hlsAddress: :8888
+webrtc: false
+srt: true
+srtAddress: :8890
+
+pathDefaults:
+  source: publisher
+  record: true
+  recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordFormat: fmp4
+  recordPartDuration: 1s
+  recordSegmentDuration: 1h
+
+paths:
+  all_others:
