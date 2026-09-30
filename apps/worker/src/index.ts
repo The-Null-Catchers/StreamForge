@@ -12,6 +12,7 @@ import { config } from "../../../packages/config/src/index.js";
 import { mediaJob } from "./pipeline.js";
 import { deliver } from "./webhooks.js";
 import { rollupAnalytics } from "./analytics.js";
+import { transcriptionJob } from "./transcription.js";
 const logger = pino();
 const workerId = randomUUID();
 let stopping = false;
@@ -21,6 +22,7 @@ const names: QueueName[] = [
   "video-transcode",
   "thumbnail-generation",
   "hls-packaging",
+  "subtitle-processing",
   "webhooks",
   "analytics",
   "cleanup",
@@ -36,6 +38,7 @@ const workers = names.map((name) => {
       if (name === "webhooks") await deliver(job.data.deliveryId);
       else if (name === "analytics")
         await rollupAnalytics(job.data.videoId, job.data.day);
+      else if (name === "subtitle-processing") await transcriptionJob(job);
       else await mediaJob(job);
     },
     {
@@ -51,6 +54,18 @@ const workers = names.map((name) => {
     logger.error({ jobId: job?.id, workerId, err: error }, "job failed");
     if (!job || job.attemptsMade < (job.opts.attempts ?? 1)) return;
     void transaction(async (c) => {
+      if (name === "subtitle-processing" && job.data.transcriptionId) {
+        await c.query(
+          `UPDATE transcriptions
+           SET status='failed',error_code=$2,updated_at=now()
+           WHERE id=$1 AND status<>'complete'`,
+          [
+            job.data.transcriptionId,
+            String(error?.message ?? "TRANSCRIPTION_FAILED").slice(0, 120),
+          ],
+        );
+        return;
+      }
       if (
         job.data.videoId &&
         !["cleanup", "analytics", "webhooks"].includes(name)

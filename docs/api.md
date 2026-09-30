@@ -136,3 +136,38 @@ Subtitle uploads are converted to WebVTT and indexed as timestamped transcript s
 The per-video endpoint can return the full timestamped transcript when `search` is omitted. Workspace search returns matching video titles, timestamps, languages, and transcript text.
 
 Automatic speech-to-text is intentionally separate from this capability: a future `TranscriptionProvider` can populate the same transcript segment model without changing search clients.
+
+
+## Automatic transcription
+
+Start a transcription job for a ready video:
+
+`POST /api/v1/videos/:id/transcriptions`
+
+Body:
+
+```json
+{ "language": "auto" }
+```
+
+Supported language modes are `auto`, `ar`, and `en`. Jobs are delivered through the durable outbox to the `subtitle-processing` BullMQ queue.
+
+List recent jobs:
+
+`GET /api/v1/videos/:id/transcriptions`
+
+Read one job:
+
+`GET /api/v1/videos/:id/transcriptions/:transcriptionId`
+
+Successful jobs create a normal subtitle track and timestamped transcript segments, so the generated text is immediately available through the existing transcript search APIs and secure playback subtitle metadata.
+
+Provider configuration:
+
+- `TRANSCRIPTION_PROVIDER=openai-compatible`
+- `TRANSCRIPTION_BASE_URL=https://api.openai.com/v1`
+- `TRANSCRIPTION_API_KEY=...`
+- `TRANSCRIPTION_MODEL=whisper-1`
+- `TRANSCRIPTION_CHUNK_SECONDS=600`
+
+The worker extracts mono 16 kHz audio with FFmpeg, chunks long media before provider calls, merges timestamps, generates WebVTT, and persists the subtitle/transcript atomically.
