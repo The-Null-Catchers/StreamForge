@@ -47,6 +47,18 @@ services:
     command: [npm, run, storage:init]
     restart: "no"
     depends_on: [minio]
+  mediamtx:
+    image: bluenviron/mediamtx:1.21.1
+    ports:
+      - "1935:1935"
+      - "8890:8890/udp"
+    volumes:
+      - "./infra/mediamtx/mediamtx.yml:/mediamtx.yml:ro"
+      - "live_recordings:/recordings"
+    networks: [internal]
+    restart: unless-stopped
+    depends_on:
+      api: { condition: service_healthy }
   mailpit:
     image: axllent/mailpit:v1.27
     ports: ["127.0.0.1:8025:8025"]
@@ -82,6 +94,8 @@ services:
     <<: *app
     image: streamforge-worker:local
     build: { context: ., dockerfile: infra/docker/Dockerfile, target: worker }
+    volumes:
+      - "live_recordings:/recordings"
     stop_grace_period: 2h
     mem_limit: 3g
     cpus: 2
@@ -98,7 +112,7 @@ services:
     image: caddy:2-alpine
     ports: ["8080:80"]
     volumes: ["./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro", "caddy:/data"]
-    depends_on: [web, api]
+    depends_on: [web, api, mediamtx]
     networks: [internal]
     restart: unless-stopped
   integration:
@@ -128,3 +142,4 @@ volumes:
   redis:
   minio:
   caddy:
+  live_recordings:
