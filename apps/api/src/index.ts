@@ -18,6 +18,7 @@ import { reviewRoutes } from "./review.js";
 import { transcriptRoutes } from "./transcripts.js";
 import { transcriptionRoutes } from "./transcriptions.js";
 import { aiRoutes } from "./ai.js";
+import { liveRoutes } from "./live.js";
 import { access } from "./context.js";
 export const app = Fastify({
   trustProxy: (_address, hop) => hop < 1,
@@ -123,6 +124,7 @@ await reviewRoutes(app);
 await transcriptRoutes(app);
 await transcriptionRoutes(app);
 await aiRoutes(app);
+await liveRoutes(app);
 app.get<{ Params: { id: string } }>(
   "/api/v1/workspaces/:id/events",
   async (req, reply) => {
