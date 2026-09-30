@@ -226,7 +226,7 @@ Jobs are dispatched through the durable outbox to the dedicated `ai` BullMQ queu
 
 ## Live ingest
 
-StreamForge uses MediaMTX as the protocol edge while StreamForge remains the source of truth for workspace permissions, hashed stream keys, session state and webhooks. MediaMTX supports external HTTP authentication and exposes RTMP, SRT, HLS and a Control API. citeturn914560search1turn292352search0
+StreamForge uses MediaMTX as the protocol edge while StreamForge remains the source of truth for workspace permissions, hashed stream keys, session state and webhooks. MediaMTX supports external HTTP authentication and exposes RTMP, SRT, HLS and a Control API.
 
 Create a stream:
 
@@ -263,11 +263,11 @@ Disable a stream:
 
 ### OBS / RTMP
 
-Use the returned `rtmpServer` as the server and `rtmpStreamKey` as the stream key. MediaMTX accepts tokens on RTMP URLs and supports external HTTP authorization. citeturn923040search2
+Use the returned `rtmpServer` as the server and `rtmpStreamKey` as the stream key. MediaMTX accepts tokens on RTMP URLs and supports external HTTP authorization.
 
 ### SRT
 
-The API returns an SRT URL that encodes the MediaMTX publish stream ID and stream credential. MediaMTX supports SRT publish URLs and credential-bearing stream IDs. citeturn923040search0turn923040search1
+The API returns an SRT URL that encodes the MediaMTX publish stream ID and stream credential. MediaMTX supports SRT publish URLs and credential-bearing stream IDs.
 
 ### HLS
 
@@ -275,6 +275,6 @@ HLS is reverse-proxied through Caddy under `/live/*`. Playback requires a Stream
 
 ### Session lifecycle and recording
 
-A successful publisher authentication opens a StreamForge live session and emits `live.started`. The worker polls the MediaMTX Control API and closes sessions that disappear, emitting `live.ended`. Recording is enabled in MediaMTX and stored in the isolated `live_recordings` volume as fragmented MP4 segments. MediaMTX supports automatic recording and its Control API exposes recordings by path. citeturn914560search4turn292352search0
+A successful publisher authentication opens a StreamForge live session and emits `live.started`. The worker polls the MediaMTX Control API and closes sessions that disappear, emitting `live.ended`. Recording is enabled in MediaMTX and stored in the isolated `live_recordings` volume as fragmented MP4 segments. MediaMTX supports automatic recording and its Control API exposes recordings by path.
 
 Live-to-VOD import into object storage remains separate work; recordings are not currently promoted into the normal VOD video pipeline automatically.
