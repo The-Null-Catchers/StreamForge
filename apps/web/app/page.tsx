@@ -20,6 +20,7 @@ import {
   FolderOpen,
   Check,
   Code2,
+  Radio,
 } from "lucide-react";
 import { api, post, session, saveSession } from "../lib/api";
 import { upload } from "../lib/upload";
@@ -79,6 +80,8 @@ export default function Dashboard() {
   const input = useRef<HTMLInputElement>(null);
   const [keys, setKeys] = useState<any[]>([]);
   const [hooks, setHooks] = useState<any[]>([]);
+  const [liveStreams, setLiveStreams] = useState<any[]>([]);
+  const [liveCredential, setLiveCredential] = useState<any | null>(null);
   const [analytics, setAnalytics] = useState<any>(null);
   const [analyticsDaily, setAnalyticsDaily] = useState<any[]>([]);
   const [analyticsRealtime, setAnalyticsRealtime] = useState<any>(null);
@@ -256,6 +259,10 @@ export default function Dashboard() {
     if (section === "playlists")
       void api(`/playlists?workspaceId=${workspace}`)
         .then(setPlaylists)
+        .catch((e) => setNotice(e.message));
+    if (section === "live")
+      void api(`/live-streams?workspaceId=${workspace}`)
+        .then(setLiveStreams)
         .catch((e) => setNotice(e.message));
   }, [section, workspace]);
   async function savePlaylistItems(nextItems: any[]) {
@@ -493,6 +500,7 @@ export default function Dashboard() {
             { id: "library", label: "Video library", icon: Film },
             { id: "activity", label: "Activity", icon: ChartNoAxesCombined },
             { id: "playlists", label: "Playlists", icon: FolderOpen },
+            { id: "live", label: "Live streams", icon: Radio },
             { id: "keys", label: "API keys", icon: KeyRound },
             { id: "webhooks", label: "Webhooks", icon: Webhook },
             { id: "settings", label: "Workspace", icon: Settings },
@@ -2071,6 +2079,136 @@ export default function Dashboard() {
                   </button>
                 </div>
               ))}
+            </>
+          ) : section === "live" ? (
+            <>
+              <div className="page-heading">
+                <div>
+                  <div className="eyebrow">REALTIME DELIVERY</div>
+                  <h1>Live streams</h1>
+                  <p>Publish with RTMP or SRT and deliver low-latency HLS.</p>
+                </div>
+              </div>
+              <section className="panel">
+                <h3>Create live stream</h3>
+                <form
+                  className="inline-form"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const form = new FormData(e.currentTarget);
+                    try {
+                      const created = await api("/live-streams", {
+                        method: "POST",
+                        body: JSON.stringify({
+                          workspaceId: workspace,
+                          name: String(form.get("name") ?? "").trim(),
+                        }),
+                      });
+                      setLiveCredential(created);
+                      setLiveStreams(
+                        await api(`/live-streams?workspaceId=${workspace}`),
+                      );
+                      e.currentTarget.reset();
+                      setNotice(
+                        "Stream key created. Copy it now; it will not be shown again.",
+                      );
+                    } catch (err) {
+                      setNotice((err as Error).message);
+                    }
+                  }}
+                >
+                  <input name="name" placeholder="Live stream name" required />
+                  <button className="primary">Create stream</button>
+                </form>
+                {liveCredential && (
+                  <div className="live-credentials">
+                    <strong>Ingest credentials · shown once</strong>
+                    <label>
+                      RTMP server
+                      <code>{liveCredential.ingest?.rtmpServer}</code>
+                    </label>
+                    <label>
+                      Stream key
+                      <code>{liveCredential.ingest?.rtmpStreamKey}</code>
+                    </label>
+                    <label>
+                      SRT URL
+                      <code>{liveCredential.ingest?.srtUrl}</code>
+                    </label>
+                    <button
+                      onClick={() =>
+                        navigator.clipboard.writeText(
+                          liveCredential.ingest?.rtmpStreamKey ?? "",
+                        )
+                      }
+                    >
+                      Copy stream key
+                    </button>
+                  </div>
+                )}
+              </section>
+              {liveStreams.map((stream) => (
+                <div className="resource-row" key={stream.id}>
+                  <Radio />
+                  <div>
+                    <strong>{stream.name}</strong>
+                    <p>
+                      {stream.status} · {stream.path}
+                      {stream.last_started_at
+                        ? ` · last started ${new Date(
+                            stream.last_started_at,
+                          ).toLocaleString()}`
+                        : ""}
+                    </p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const p = await api(
+                          `/live-streams/${stream.id}/playback`,
+                        );
+                        await navigator.clipboard.writeText(p.hlsUrl);
+                        setNotice("Signed HLS URL copied. It expires in 15 minutes.");
+                      } catch (err) {
+                        setNotice((err as Error).message);
+                      }
+                    }}
+                    disabled={stream.status !== "live"}
+                  >
+                    Copy HLS
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const rotated = await api(
+                          `/live-streams/${stream.id}/rotate-key`,
+                          { method: "POST", body: JSON.stringify({}) },
+                        );
+                        setLiveCredential({
+                          id: stream.id,
+                          ingest: {
+                            rtmpServer: "",
+                            rtmpStreamKey: rotated.rtmpStreamKey,
+                            srtUrl: rotated.srtUrl,
+                          },
+                        });
+                        setNotice("Stream key rotated. Copy the new key now.");
+                      } catch (err) {
+                        setNotice((err as Error).message);
+                      }
+                    }}
+                  >
+                    Rotate key
+                  </button>
+                </div>
+              ))}
+              {!liveStreams.length && (
+                <div className="empty">
+                  <Radio size={36} />
+                  <h2>No live streams yet</h2>
+                  <p>Create a stream and connect OBS or FFmpeg.</p>
+                </div>
+              )}
             </>
           ) : section === "activity" ? (
             <>
