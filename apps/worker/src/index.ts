@@ -13,6 +13,7 @@ import { mediaJob } from "./pipeline.js";
 import { deliver } from "./webhooks.js";
 import { rollupAnalytics } from "./analytics.js";
 import { transcriptionJob } from "./transcription.js";
+import { aiGenerationJob } from "./ai.js";
 const logger = pino();
 const workerId = randomUUID();
 let stopping = false;
@@ -25,6 +26,7 @@ const names: QueueName[] = [
   "subtitle-processing",
   "webhooks",
   "analytics",
+  "ai",
   "cleanup",
 ];
 const workers = names.map((name) => {
@@ -39,6 +41,7 @@ const workers = names.map((name) => {
       else if (name === "analytics")
         await rollupAnalytics(job.data.videoId, job.data.day);
       else if (name === "subtitle-processing") await transcriptionJob(job);
+      else if (name === "ai") await aiGenerationJob(job);
       else await mediaJob(job);
     },
     {
@@ -66,9 +69,21 @@ const workers = names.map((name) => {
         );
         return;
       }
+      if (name === "ai" && job.data.generationId) {
+        await c.query(
+          `UPDATE ai_generations
+           SET status='failed',error_code=$2,updated_at=now()
+           WHERE id=$1 AND status<>'complete'`,
+          [
+            job.data.generationId,
+            String(error?.message ?? "AI_GENERATION_FAILED").slice(0, 120),
+          ],
+        );
+        return;
+      }
       if (
         job.data.videoId &&
-        !["cleanup", "analytics", "webhooks"].includes(name)
+        !["cleanup", "analytics", "ai", "webhooks"].includes(name)
       ) {
         await c.query(
           "UPDATE processing_jobs SET status='dead_letter',error_code='PROCESSING_FAILED' WHERE id=$1",

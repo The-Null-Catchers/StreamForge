@@ -44,6 +44,16 @@ const schema = z.object({
     .min(60)
     .max(1800)
     .default(600),
+  AI_PROVIDER: z.enum(["disabled", "openai-compatible"]).default("disabled"),
+  AI_BASE_URL: z.url().default("https://api.openai.com/v1"),
+  AI_API_KEY: z.string().optional(),
+  AI_MODEL: z.string().default("gpt-4.1-mini"),
+  AI_MAX_TRANSCRIPT_CHARS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .max(200000)
+    .default(60000),
 });
 export const config = schema.parse(process.env);
 if (
@@ -59,3 +69,6 @@ if (
   !config.TRANSCRIPTION_API_KEY
 )
   throw Error("Configure TRANSCRIPTION_API_KEY");
+
+if (config.AI_PROVIDER !== "disabled" && !config.AI_API_KEY)
+  throw Error("Configure AI_API_KEY");

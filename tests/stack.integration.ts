@@ -393,6 +393,52 @@ test(
         409,
       );
 
+      assert.equal(
+        (
+          await request(`/api/v1/videos/${v.id}/ai-generations`, "POST", {
+            kind: "all",
+            language: "ar",
+          })
+        ).status,
+        503,
+      );
+      const aiGenerationId = randomUUID();
+      await db.query(
+        `INSERT INTO ai_generations(
+           id,video_id,kind,language,provider,model,status,result,completed_at
+         ) VALUES($1,$2,'all','ar','test','test-model','complete',$3,now())`,
+        [
+          aiGenerationId,
+          v.id,
+          JSON.stringify({
+            summary: "ملخص تجريبي",
+            title: "عنوان مقترح",
+            description: "وصف مقترح من النص.",
+            tags: ["اختبار", "فيديو"],
+            chapters: [
+              { startSeconds: 0, title: "البداية" },
+              { startSeconds: 3, title: "الجزء الثاني" },
+            ],
+          }),
+        ],
+      );
+      const aiApply = await request(
+        `/api/v1/videos/${v.id}/ai-generations/${aiGenerationId}/apply`,
+        "POST",
+        { metadata: true, chapters: true },
+      );
+      assert.equal(aiApply.status, 200, JSON.stringify(aiApply.body));
+      const aiUpdatedVideo = await request(`/api/v1/videos/${v.id}`);
+      assert.equal(aiUpdatedVideo.body.title, "عنوان مقترح");
+      assert.deepEqual(aiUpdatedVideo.body.tags, ["اختبار", "فيديو"]);
+      const aiUpdatedChapters = await request(
+        `/api/v1/videos/${v.id}/chapters`,
+      );
+      assert.deepEqual(
+        aiUpdatedChapters.body.map((chapter: any) => chapter.title),
+        ["البداية", "الجزء الثاني"],
+      );
+
       const playlistCreated = await request("/api/v1/playlists", "POST", {
         workspaceId: ws.id,
         name: "Integration playlist",

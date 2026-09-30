@@ -93,6 +93,7 @@ export default function Dashboard() {
   const [reviewComments, setReviewComments] = useState<any[]>([]);
   const [transcriptResults, setTranscriptResults] = useState<any[]>([]);
   const [transcriptions, setTranscriptions] = useState<any[]>([]);
+  const [aiGenerations, setAiGenerations] = useState<any[]>([]);
   useEffect(() => {
     setAuthenticated(!!session());
     const q = new URLSearchParams(location.search);
@@ -225,17 +226,20 @@ export default function Dashboard() {
       setReviewComments([]);
       setTranscriptResults([]);
       setTranscriptions([]);
+      setAiGenerations([]);
       return;
     }
     void Promise.all([
       api(`/videos/${selected.id}/versions`),
       api(`/videos/${selected.id}/review-comments`),
       api(`/videos/${selected.id}/transcriptions`),
+      api(`/videos/${selected.id}/ai-generations`),
     ])
-      .then(([versionRows, commentRows, transcriptionRows]) => {
+      .then(([versionRows, commentRows, transcriptionRows, generationRows]) => {
         setVersions(versionRows);
         setReviewComments(commentRows);
         setTranscriptions(transcriptionRows);
+        setAiGenerations(generationRows);
       })
       .catch((e) => setNotice(e.message));
   }, [selected?.id]);
@@ -888,6 +892,136 @@ export default function Dashboard() {
                   ))
                 ) : (
                   <p>No automatic transcription jobs yet.</p>
+                )}
+              </section>
+              <section className="panel">
+                <h3>AI media helpers</h3>
+                <p>
+                  Generate grounded suggestions from the indexed transcript.
+                  Suggestions are never applied until you explicitly choose Apply.
+                </p>
+                <form
+                  className="inline-form"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const form = new FormData(e.currentTarget);
+                    try {
+                      await api(`/videos/${selected.id}/ai-generations`, {
+                        method: "POST",
+                        body: JSON.stringify({
+                          kind: String(form.get("kind") ?? "all"),
+                          language: String(form.get("language") ?? "auto"),
+                        }),
+                      });
+                      setAiGenerations(
+                        await api(`/videos/${selected.id}/ai-generations`),
+                      );
+                      setNotice("AI generation queued.");
+                    } catch (err) {
+                      setNotice((err as Error).message);
+                    }
+                  }}
+                >
+                  <select name="kind" defaultValue="all">
+                    <option value="all">All suggestions</option>
+                    <option value="summary">Summary</option>
+                    <option value="metadata">Title, description & tags</option>
+                    <option value="chapters">Chapters</option>
+                  </select>
+                  <select name="language" defaultValue="auto">
+                    <option value="auto">Transcript language</option>
+                    <option value="ar">Arabic</option>
+                    <option value="en">English</option>
+                  </select>
+                  <button disabled={selected.status !== "ready"}>
+                    Generate suggestions
+                  </button>
+                </form>
+                {aiGenerations.length ? (
+                  aiGenerations.map((generation) => (
+                    <div className="ai-generation" key={generation.id}>
+                      <div className="resource-row">
+                        <div>
+                          <strong>
+                            {generation.kind} · {generation.status}
+                          </strong>
+                          <p>
+                            {generation.status === "failed"
+                              ? generation.error_code || "AI generation failed"
+                              : `${generation.model} · ${generation.language.toUpperCase()}`}
+                          </p>
+                        </div>
+                        {generation.status === "complete" && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await api(
+                                  `/videos/${selected.id}/ai-generations/${generation.id}/apply`,
+                                  {
+                                    method: "POST",
+                                    body: JSON.stringify({
+                                      metadata: true,
+                                      chapters: true,
+                                    }),
+                                  },
+                                );
+                                const [video, chapterRows] = await Promise.all([
+                                  api(`/videos/${selected.id}`),
+                                  api(`/videos/${selected.id}/chapters`),
+                                ]);
+                                setSelected(video);
+                                setChapters(chapterRows);
+                                setNotice("AI suggestions applied.");
+                              } catch (err) {
+                                setNotice((err as Error).message);
+                              }
+                            }}
+                          >
+                            Apply
+                          </button>
+                        )}
+                      </div>
+                      {generation.result && (
+                        <div className="ai-result">
+                          {generation.result.summary && (
+                            <p>{generation.result.summary}</p>
+                          )}
+                          {generation.result.title && (
+                            <p>
+                              <strong>Title:</strong> {generation.result.title}
+                            </p>
+                          )}
+                          {generation.result.description && (
+                            <p>
+                              <strong>Description:</strong>{" "}
+                              {generation.result.description}
+                            </p>
+                          )}
+                          {generation.result.tags?.length ? (
+                            <p>
+                              <strong>Tags:</strong>{" "}
+                              {generation.result.tags.join(" · ")}
+                            </p>
+                          ) : null}
+                          {generation.result.chapters?.length ? (
+                            <div>
+                              <strong>Suggested chapters</strong>
+                              {generation.result.chapters.map(
+                                (chapter: any, index: number) => (
+                                  <p key={`${chapter.startSeconds}-${index}`}>
+                                    {time(Number(chapter.startSeconds))} ·{" "}
+                                    {chapter.title}
+                                  </p>
+                                ),
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p>No AI suggestions generated yet.</p>
                 )}
               </section>
               <section className="panel">

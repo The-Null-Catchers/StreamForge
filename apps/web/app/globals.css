@@ -1188,3 +1188,25 @@ code {
   margin-top: 24px;
   font-size: 12px;
 }
+
+.ai-generation {
+  margin-top: 12px;
+}
+.ai-generation .resource-row {
+  margin-bottom: 8px;
+}
+.ai-result {
+  padding: 14px 16px;
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #f8fafb;
+}
+.ai-result p {
+  margin: 7px 0;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.ai-result > div {
+  margin-top: 12px;
+}
