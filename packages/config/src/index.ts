@@ -54,6 +54,11 @@ const schema = z.object({
     .min(1000)
     .max(200000)
     .default(60000),
+  LIVE_INGEST_ENABLED: z.coerce.boolean().default(true),
+  LIVE_MEDIAMTX_API_URL: z.url().default("http://mediamtx:9997"),
+  LIVE_PUBLIC_RTMP_URL: z.string().default("rtmp://localhost:1935/live"),
+  LIVE_PUBLIC_SRT_URL: z.string().default("srt://localhost:8890"),
+  LIVE_PUBLIC_HLS_URL: z.url().default("http://localhost:8080/live"),
 });
 export const config = schema.parse(process.env);
 if (
