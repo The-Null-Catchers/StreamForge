@@ -86,7 +86,11 @@ export async function transcriptionJob(job: Job) {
       .sort();
     if (!files.length) throw Error("NO_AUDIO_STREAM");
 
-    const provider = transcriptionProvider();
+    const provider = transcriptionProvider(config.TRANSCRIPTION_PROVIDER, {
+      baseUrl: config.TRANSCRIPTION_BASE_URL,
+      apiKey: config.TRANSCRIPTION_API_KEY!,
+      model: config.TRANSCRIPTION_MODEL,
+    });
     const segments: TranscriptionSegment[] = [];
     let detectedLanguage: string | undefined;
     for (let index = 0; index < files.length; index++) {
