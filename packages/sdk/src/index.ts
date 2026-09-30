@@ -161,6 +161,52 @@ export class StreamForge {
           `/videos/${encodeURIComponent(id)}/transcriptions/${encodeURIComponent(transcriptionId)}`,
         ),
     },
+    ai: {
+      list: (id: string) =>
+        this.request<Array<{
+          id: string;
+          kind: "summary" | "metadata" | "chapters" | "all";
+          language: "auto" | "ar" | "en";
+          provider: string;
+          model: string;
+          status: "queued" | "running" | "complete" | "failed";
+          result?: {
+            summary?: string;
+            title?: string;
+            description?: string;
+            tags?: string[];
+            chapters?: Array<{ startSeconds: number; title: string }>;
+          };
+          error_code?: string;
+        }>>(`/videos/${encodeURIComponent(id)}/ai-generations`),
+      create: (
+        id: string,
+        input: {
+          kind?: "summary" | "metadata" | "chapters" | "all";
+          language?: "auto" | "ar" | "en";
+        } = {},
+      ) =>
+        this.request(`/videos/${encodeURIComponent(id)}/ai-generations`, {
+          method: "POST",
+          body: JSON.stringify(input),
+        }),
+      get: (id: string, generationId: string) =>
+        this.request(
+          `/videos/${encodeURIComponent(id)}/ai-generations/${encodeURIComponent(generationId)}`,
+        ),
+      apply: (
+        id: string,
+        generationId: string,
+        options: { metadata?: boolean; chapters?: boolean } = {},
+      ) =>
+        this.request(
+          `/videos/${encodeURIComponent(id)}/ai-generations/${encodeURIComponent(generationId)}/apply`,
+          {
+            method: "POST",
+            body: JSON.stringify(options),
+          },
+        ),
+    },
     review: {
       comments: (id: string) =>
         this.request<ReviewComment[]>(`/videos/${encodeURIComponent(id)}/review-comments`),
