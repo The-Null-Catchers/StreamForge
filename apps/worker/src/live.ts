@@ -53,7 +53,7 @@ export async function syncLiveStreams() {
            )`,
           [stream.id],
         );
-        await event(client, stream.workspace_id, stream.id, "live.started");
+        await event(client, stream.workspace_id, stream.id, "live.started", "streamId");
       }
       if (!isActive && stream.status === "live") {
         await client.query(
@@ -68,7 +68,7 @@ export async function syncLiveStreams() {
            WHERE stream_id=$1 AND ended_at IS NULL`,
           [stream.id],
         );
-        await event(client, stream.workspace_id, stream.id, "live.ended");
+        await event(client, stream.workspace_id, stream.id, "live.ended", "streamId");
       }
     }
   });
