@@ -64,6 +64,93 @@ test(
         name: "Integration workspace",
       })
     ).body;
+    const liveCreated = await request("/api/v1/live-streams", "POST", {
+      workspaceId: ws.id,
+      name: "Integration live",
+    });
+    assert.equal(liveCreated.status, 201, JSON.stringify(liveCreated.body));
+    assert.match(liveCreated.body.streamKey, /^sf_stream_/);
+    assert.match(liveCreated.body.ingest.rtmpStreamKey, new RegExp(liveCreated.body.id));
+
+    const livePath = `live/${liveCreated.body.id}`;
+    const badPublishAuth = await fetch(base + "/api/v1/live/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user: "",
+        password: "",
+        token: "bad-key",
+        action: "publish",
+        path: livePath,
+        protocol: "rtmp",
+        id: "integration-publisher",
+        query: "",
+      }),
+    });
+    assert.equal(badPublishAuth.status, 403);
+
+    const goodPublishAuth = await fetch(base + "/api/v1/live/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user: "",
+        password: "",
+        token: liveCreated.body.streamKey,
+        action: "publish",
+        path: livePath,
+        protocol: "rtmp",
+        id: "integration-publisher",
+        query: "",
+      }),
+    });
+    assert.equal(goodPublishAuth.status, 204);
+
+    const livePlayback = await request(
+      `/api/v1/live-streams/${liveCreated.body.id}/playback`,
+    );
+    assert.equal(livePlayback.status, 200, JSON.stringify(livePlayback.body));
+    assert.match(livePlayback.body.hlsUrl, /index\.m3u8\?token=/);
+
+    const playbackAuth = await fetch(base + "/api/v1/live/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user: "",
+        password: "",
+        token: livePlayback.body.token,
+        action: "playback",
+        path: livePath,
+        protocol: "hls",
+        id: "integration-reader",
+        query: "",
+      }),
+    });
+    assert.equal(playbackAuth.status, 204);
+
+    const rotated = await request(
+      `/api/v1/live-streams/${liveCreated.body.id}/rotate-key`,
+      "POST",
+      {},
+    );
+    assert.equal(rotated.status, 200);
+    assert.match(rotated.body.streamKey, /^sf_stream_/);
+
+    const oldKeyAfterRotate = await fetch(base + "/api/v1/live/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user: "",
+        password: "",
+        token: liveCreated.body.streamKey,
+        action: "publish",
+        path: livePath,
+        protocol: "rtmp",
+        id: "integration-publisher-2",
+        query: "",
+      }),
+    });
+    assert.equal(oldKeyAfterRotate.status, 403);
+
     const v = (
       await request("/api/v1/videos", "POST", {
         workspaceId: ws.id,
