@@ -1,4 +1,4 @@
-import { db, transaction } from "../../../packages/shared/src/db.js";
+import { transaction } from "../../../packages/shared/src/db.js";
 import { event } from "../../../packages/shared/src/events.js";
 import { config } from "../../../packages/config/src/index.js";
 
