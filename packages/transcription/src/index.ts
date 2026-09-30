@@ -1,6 +1,5 @@
 import { basename } from "node:path";
 import { readFile } from "node:fs/promises";
-import { config } from "../../config/src/index.js";
 
 export type TranscriptionSegment = {
   start: number;
@@ -17,7 +16,15 @@ export interface TranscriptionProvider {
   transcribe(file: string, language?: "ar" | "en"): Promise<TranscriptionResult>;
 }
 
+export type TranscriptionProviderOptions = {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+};
+
 class OpenAICompatibleTranscriptionProvider implements TranscriptionProvider {
+  constructor(private options: TranscriptionProviderOptions) {}
+
   async transcribe(
     file: string,
     language?: "ar" | "en",
@@ -25,17 +32,17 @@ class OpenAICompatibleTranscriptionProvider implements TranscriptionProvider {
     const body = new FormData();
     const bytes = await readFile(file);
     body.set("file", new Blob([bytes], { type: "audio/mpeg" }), basename(file));
-    body.set("model", config.TRANSCRIPTION_MODEL);
+    body.set("model", this.options.model);
     body.set("response_format", "verbose_json");
     body.append("timestamp_granularities[]", "segment");
     if (language) body.set("language", language);
 
     const response = await fetch(
-      `${config.TRANSCRIPTION_BASE_URL.replace(/\/$/, "")}/audio/transcriptions`,
+      `${this.options.baseUrl.replace(/\/$/, "")}/audio/transcriptions`,
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${config.TRANSCRIPTION_API_KEY}`,
+          Authorization: `Bearer ${this.options.apiKey}`,
         },
         body,
         signal: AbortSignal.timeout(180000),
@@ -72,9 +79,12 @@ class OpenAICompatibleTranscriptionProvider implements TranscriptionProvider {
   }
 }
 
-export function transcriptionProvider(): TranscriptionProvider {
-  if (config.TRANSCRIPTION_PROVIDER === "openai-compatible")
-    return new OpenAICompatibleTranscriptionProvider();
+export function transcriptionProvider(
+  provider: "disabled" | "openai-compatible",
+  options?: TranscriptionProviderOptions,
+): TranscriptionProvider {
+  if (provider === "openai-compatible" && options)
+    return new OpenAICompatibleTranscriptionProvider(options);
   throw Error("TRANSCRIPTION_NOT_CONFIGURED");
 }
 
