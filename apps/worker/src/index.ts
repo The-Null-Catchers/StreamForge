@@ -14,6 +14,7 @@ import { deliver } from "./webhooks.js";
 import { rollupAnalytics } from "./analytics.js";
 import { transcriptionJob } from "./transcription.js";
 import { aiGenerationJob } from "./ai.js";
+import { syncLiveStreams } from "./live.js";
 const logger = pino();
 const workerId = randomUUID();
 let stopping = false;
@@ -157,6 +158,7 @@ async function maintenance() {
         await enqueue(c, "cleanup", { videoId: u.video_id });
       }
     });
+    await syncLiveStreams();
     await db.query(
       "DELETE FROM analytics_events WHERE created_at<now()-interval '90 days'",
     );
