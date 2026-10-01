@@ -28,6 +28,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cp .env.example .env
+      - name: Validate monitoring compose profile
+        run: docker compose --profile monitoring config >/dev/null
       - run: docker compose up -d --build
       - name: Wait for API health
         run: |

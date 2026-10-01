@@ -388,3 +388,37 @@ The response now includes:
 - `live_minutes_monthly_limit`
 
 Monthly usage includes both finalized session records and elapsed time from currently active sessions, so the publish gate cannot be bypassed by keeping long sessions open until month-end accounting.
+
+
+## Operations diagnostics
+
+Workspace admins can inspect a scoped operational snapshot:
+
+`GET /api/v1/workspaces/:id/operations`
+
+The response contains:
+
+- database, Redis and object-storage health,
+- recent worker-heartbeat count,
+- workspace processing-job states,
+- live-stream state and active-ingest counts,
+- recent failed processing jobs,
+- recent failed webhook deliveries,
+- source/output storage footprint,
+- finalized live usage.
+
+This endpoint is intentionally workspace scoped and requires the `admin` role.
+
+### Prometheus and Grafana
+
+The monitoring stack is opt-in:
+
+```bash
+docker compose --profile monitoring up -d prometheus grafana
+```
+
+Prometheus loads `infra/monitoring/alerts.yml` and scrapes the internal API metrics listener on port `9091`. Grafana is provisioned with the Prometheus datasource and the `StreamForge Operations` dashboard.
+
+Grafana binds to `127.0.0.1:3001` by default and requires the configured admin credentials. Prometheus also binds to loopback only. Neither service is routed through the public Caddy listener.
+
+Before production deployment, replace `GRAFANA_ADMIN_PASSWORD` and tune storage/queue alert thresholds to match the actual workspace plans and capacity.
