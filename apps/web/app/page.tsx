@@ -2506,7 +2506,7 @@ export default function Dashboard() {
                           <div className="resource-row" key={row.id}>
                             <X size={16} />
                             <div>
-                              <strong>{row.stage}</strong>
+                              <strong>{row.queue}</strong>
                               <p>
                                 {row.error_code || "Unknown error"} · video{" "}
                                 {row.video_id}
