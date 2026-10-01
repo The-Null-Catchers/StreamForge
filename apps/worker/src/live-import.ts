@@ -75,7 +75,12 @@ export async function liveImportJob(job: Job) {
     [sessionId],
   );
 
-  const recordingDir = join("/recordings", session.path);
+  let recordingDir = join("/recordings", session.path, "program");
+  try {
+    await readdir(recordingDir);
+  } catch {
+    recordingDir = join("/recordings", session.path);
+  }
   const started = new Date(session.started_at).getTime() - 5 * 60_000;
   const ended = new Date(session.ended_at).getTime() + 5 * 60_000;
   let files: string[] = [];
