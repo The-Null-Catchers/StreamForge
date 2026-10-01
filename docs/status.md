@@ -4,7 +4,7 @@ This document distinguishes code that performs real work from design groundwork 
 
 | Area          | Current implementation                                                                                                       | Remaining work                                                                                          |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Auth          | Registration, verification/reset email, rotating refresh families, sessions and logout APIs                                  | Hardened CSP, external auth/security review                                            |
+| Auth          | Registration, verification/reset email, rotating refresh families, sessions/logout APIs, nonce-based CSP and browser security headers | External auth/security review |
 | Workspaces    | Membership roles, owner-only role/remove API, invitation token acceptance, audit/notification API                            | Invitation email delivery, richer member-management UI, owner transfer                                  |
 | Uploads       | Real 8 MiB chunks, checksums, durable status, resume/retry, pause UI, cancel API, expiry                                     | Cancel UI, duplicate warning UI, tus compatibility, direct S3 multipart                                 |
 | Media         | Real FFprobe, source-aware H.264/AAC HLS, poster, timeline images/VTT                                                        | Configurable profiles, multitrack audio, manual poster, sprites, CMAF                                   |
