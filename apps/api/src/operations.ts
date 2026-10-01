@@ -80,7 +80,7 @@ export async function operationsRoutes(app: FastifyInstance) {
             [req.params.id],
           ),
           db.query(
-            `SELECT d.id,d.event,d.attempts,d.last_error,d.created_at
+            `SELECT d.id,d.event,d.attempts,d.response_status,d.created_at
              FROM webhook_deliveries d
              JOIN webhooks w ON w.id=d.webhook_id
              WHERE w.workspace_id=$1
