@@ -32,9 +32,13 @@ function queryToken(query: string) {
   }
 }
 
-function streamIdFromPath(path: string) {
-  const match = /^live\/([a-f0-9-]{36})$/.exec(path);
-  return match?.[1];
+function streamPath(path: string) {
+  const match = /^live\/([a-f0-9-]{36})(?:\/(primary|backup))?$/.exec(path);
+  if (!match) return null;
+  return {
+    streamId: match[1]!,
+    ingest: (match[2] ?? "primary") as "primary" | "backup",
+  };
 }
 
 async function liveClaims(token: string) {
@@ -56,13 +60,13 @@ export async function liveRoutes(app: FastifyInstance) {
     { config: { rateLimit: false } },
     async (req, reply) => {
       const body = authBody.parse(req.body);
-      const streamId = streamIdFromPath(body.path);
-      if (!streamId) return reply.code(403).send();
+      const parsedPath = streamPath(body.path);
+      if (!parsedPath) return reply.code(403).send();
 
       const stream = (
         await db.query(
-          "SELECT * FROM live_streams WHERE id=$1 AND path=$2 AND status<>'disabled'",
-          [streamId, body.path],
+          "SELECT * FROM live_streams WHERE id=$1 AND status<>'disabled'",
+          [parsedPath.streamId],
         )
       ).rows[0];
       if (!stream) return reply.code(403).send();
@@ -70,7 +74,11 @@ export async function liveRoutes(app: FastifyInstance) {
       if (body.action === "publish") {
         const credential =
           body.token || queryToken(body.query) || body.password;
-        if (!credential || hash(credential) !== stream.stream_key_hash)
+        const expectedHash =
+          parsedPath.ingest === "backup"
+            ? stream.backup_stream_key_hash
+            : stream.stream_key_hash;
+        if (!credential || !expectedHash || hash(credential) !== expectedHash)
           return reply.code(403).send();
 
         await transaction(async (client) => {
@@ -114,6 +122,8 @@ export async function liveRoutes(app: FastifyInstance) {
         const token =
           body.token || queryToken(body.query) || body.password;
         if (!token) return reply.code(401).send();
+        if (body.action === "read" && token === config.LIVE_TRANSCODER_TOKEN)
+          return reply.code(204).send();
         try {
           const claims = await liveClaims(token);
           if (
@@ -132,32 +142,62 @@ export async function liveRoutes(app: FastifyInstance) {
     },
   );
 
+  app.get("/api/v1/live/playback-auth", async (req, reply) => {
+    const forwarded = String(req.headers["x-forwarded-uri"] ?? "");
+    const match = /^\/live\/([a-f0-9-]{36})\/.+/.exec(forwarded);
+    if (!match) return reply.code(403).send();
+    const url = new URL(forwarded, "http://streamforge.local");
+    const token = url.searchParams.get("token");
+    if (!token) return reply.code(401).send();
+    try {
+      const claims = await liveClaims(token);
+      if (claims.kind !== "live" || claims.streamId !== match[1])
+        return reply.code(403).send();
+      const stream = await db.query(
+        "SELECT 1 FROM live_streams WHERE id=$1 AND status<>'disabled'",
+        [match[1]],
+      );
+      if (!stream.rowCount) return reply.code(403).send();
+      return reply.code(204).send();
+    } catch {
+      return reply.code(403).send();
+    }
+  });
+
   app.post("/api/v1/live-streams", async (req, reply) => {
     const body = z
       .object({
         workspaceId: uuid,
         name: z.string().trim().min(1).max(200),
         autoCreateVod: z.boolean().default(true),
+        dvrWindowSeconds: z.number().int().min(30).max(21600).default(600),
+        liveProfile: z.enum(["source", "standard", "high"]).default("standard"),
       })
       .parse(req.body);
     const a = await access(req, body.workspaceId, "editor", "videos:write");
     const id = crypto.randomUUID();
     const key = `sf_stream_${opaque()}`;
+    const backupKey = `sf_stream_${opaque()}`;
     const path = `live/${id}`;
     const row = (
       await db.query(
         `INSERT INTO live_streams(
-           id,workspace_id,name,path,stream_key_hash,recording_enabled,auto_create_vod,created_by
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
-         RETURNING id,workspace_id,name,path,recording_enabled,auto_create_vod,status,created_at`,
+           id,workspace_id,name,path,stream_key_hash,backup_stream_key_hash,
+           recording_enabled,auto_create_vod,dvr_window_seconds,live_profile,created_by
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         RETURNING id,workspace_id,name,path,recording_enabled,auto_create_vod,
+                   dvr_window_seconds,live_profile,status,created_at`,
         [
           id,
           body.workspaceId,
           body.name,
           path,
           hash(key),
+          hash(backupKey),
           true,
           body.autoCreateVod,
+          body.dvrWindowSeconds,
+          body.liveProfile,
           a.userId ?? null,
         ],
       )
@@ -166,12 +206,20 @@ export async function liveRoutes(app: FastifyInstance) {
     return reply.code(201).send({
       ...row,
       streamKey: key,
+      backupStreamKey: backupKey,
       ingest: {
         rtmpServer: config.LIVE_PUBLIC_RTMP_URL,
-        rtmpStreamKey: `${id}?token=${key}`,
-        srtUrl:
+        primaryRtmpStreamKey: `${id}/primary?token=${key}`,
+        backupRtmpStreamKey: `${id}/backup?token=${backupKey}`,
+        primarySrtUrl:
           `${config.LIVE_PUBLIC_SRT_URL}?streamid=` +
-          encodeURIComponent(`publish:${path}:streamforge:${key}`) +
+          encodeURIComponent(`publish:${path}/primary:streamforge:${key}`) +
+          "&pkt_size=1316",
+        backupSrtUrl:
+          `${config.LIVE_PUBLIC_SRT_URL}?streamid=` +
+          encodeURIComponent(
+            `publish:${path}/backup:streamforge:${backupKey}`,
+          ) +
           "&pkt_size=1316",
       },
     });
@@ -184,6 +232,7 @@ export async function liveRoutes(app: FastifyInstance) {
       await db.query(
         `SELECT
            id,workspace_id,name,path,recording_enabled,auto_create_vod,status,
+           active_ingest,dvr_window_seconds,live_profile,
            last_started_at,last_ended_at,created_at,updated_at
          FROM live_streams
          WHERE workspace_id=$1
@@ -225,6 +274,9 @@ export async function liveRoutes(app: FastifyInstance) {
         recording_enabled: stream.recording_enabled,
         auto_create_vod: stream.auto_create_vod,
         status: stream.status,
+        active_ingest: stream.active_ingest,
+        dvr_window_seconds: stream.dvr_window_seconds,
+        live_profile: stream.live_profile,
         last_started_at: stream.last_started_at,
         last_ended_at: stream.last_ended_at,
         created_at: stream.created_at,
@@ -251,10 +303,15 @@ export async function liveRoutes(app: FastifyInstance) {
         .object({
           name: z.string().trim().min(1).max(200).optional(),
           autoCreateVod: z.boolean().optional(),
+          dvrWindowSeconds: z.number().int().min(30).max(21600).optional(),
+          liveProfile: z.enum(["source", "standard", "high"]).optional(),
         })
         .refine(
           (value) =>
-            value.name !== undefined || value.autoCreateVod !== undefined,
+            value.name !== undefined ||
+            value.autoCreateVod !== undefined ||
+            value.dvrWindowSeconds !== undefined ||
+            value.liveProfile !== undefined,
           "NO_CHANGES",
         )
         .parse(req.body ?? {});
@@ -262,9 +319,17 @@ export async function liveRoutes(app: FastifyInstance) {
         `UPDATE live_streams
          SET name=coalesce($1,name),
              auto_create_vod=coalesce($2,auto_create_vod),
+             dvr_window_seconds=coalesce($3,dvr_window_seconds),
+             live_profile=coalesce($4,live_profile),
              updated_at=now()
-         WHERE id=$3`,
-        [body.name ?? null, body.autoCreateVod ?? null, stream.id],
+         WHERE id=$5`,
+        [
+          body.name ?? null,
+          body.autoCreateVod ?? null,
+          body.dvrWindowSeconds ?? null,
+          body.liveProfile ?? null,
+          stream.id,
+        ],
       );
       await audit(stream.workspace_id, a, "live-stream.updated", stream.id);
       return { ok: true };
@@ -330,18 +395,29 @@ export async function liveRoutes(app: FastifyInstance) {
         "videos:write",
       );
       const key = `sf_stream_${opaque()}`;
+      const backupKey = `sf_stream_${opaque()}`;
       await db.query(
-        "UPDATE live_streams SET stream_key_hash=$1,updated_at=now() WHERE id=$2",
-        [hash(key), stream.id],
+        `UPDATE live_streams
+         SET stream_key_hash=$1,backup_stream_key_hash=$2,updated_at=now()
+         WHERE id=$3`,
+        [hash(key), hash(backupKey), stream.id],
       );
       await audit(stream.workspace_id, a, "live-stream.key-rotated", stream.id);
       return {
         streamKey: key,
-        rtmpStreamKey: `${stream.id}?token=${key}`,
-        srtUrl:
+        backupStreamKey: backupKey,
+        primaryRtmpStreamKey: `${stream.id}/primary?token=${key}`,
+        backupRtmpStreamKey: `${stream.id}/backup?token=${backupKey}`,
+        primarySrtUrl:
           `${config.LIVE_PUBLIC_SRT_URL}?streamid=` +
           encodeURIComponent(
-            `publish:${stream.path}:streamforge:${key}`,
+            `publish:${stream.path}/primary:streamforge:${key}`,
+          ) +
+          "&pkt_size=1316",
+        backupSrtUrl:
+          `${config.LIVE_PUBLIC_SRT_URL}?streamid=` +
+          encodeURIComponent(
+            `publish:${stream.path}/backup:streamforge:${backupKey}`,
           ) +
           "&pkt_size=1316",
       };
@@ -373,7 +449,7 @@ export async function liveRoutes(app: FastifyInstance) {
         token,
         expiresIn: 900,
         hlsUrl:
-          `${config.LIVE_PUBLIC_HLS_URL}/${stream.id}/index.m3u8?token=${encodeURIComponent(token)}`,
+          `${config.LIVE_PUBLIC_HLS_URL}/${stream.id}/master.m3u8?token=${encodeURIComponent(token)}`,
       };
     },
   );
