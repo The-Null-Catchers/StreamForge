@@ -142,6 +142,73 @@ test(
     });
     assert.equal(backupPublishAuth.status, 204);
 
+    await db.query(
+      "UPDATE workspaces SET live_concurrency_limit=1 WHERE id=$1",
+      [ws.id],
+    );
+    await db.query(
+      "UPDATE live_streams SET status='live' WHERE id=$1",
+      [liveCreated.body.id],
+    );
+    const secondLive = await request("/api/v1/live-streams", "POST", {
+      workspaceId: ws.id,
+      name: "Quota stream",
+    });
+    assert.equal(secondLive.status, 201);
+    const concurrentDenied = await fetch(base + "/api/v1/live/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user: "",
+        password: "",
+        token: secondLive.body.streamKey,
+        action: "publish",
+        path: `live/${secondLive.body.id}/primary`,
+        protocol: "rtmp",
+        id: "quota-publisher",
+        query: "",
+      }),
+    });
+    assert.equal(concurrentDenied.status, 403);
+
+    await db.query(
+      `UPDATE workspaces
+       SET live_concurrency_limit=3,live_minutes_monthly_limit=1
+       WHERE id=$1`,
+      [ws.id],
+    );
+    await db.query(
+      `INSERT INTO usage_records(
+         workspace_id,kind,amount,idempotency_key
+       ) VALUES($1,'live_seconds',60,$2)`,
+      [ws.id, `quota-live-${randomUUID()}`],
+    );
+    await db.query(
+      "UPDATE live_streams SET status='ended' WHERE id=$1",
+      [liveCreated.body.id],
+    );
+    const monthlyDenied = await fetch(base + "/api/v1/live/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user: "",
+        password: "",
+        token: secondLive.body.streamKey,
+        action: "publish",
+        path: `live/${secondLive.body.id}/primary`,
+        protocol: "rtmp",
+        id: "monthly-quota-publisher",
+        query: "",
+      }),
+    });
+    assert.equal(monthlyDenied.status, 403);
+
+    const liveUsage = await request(`/api/v1/workspaces/${ws.id}/usage`);
+    assert.equal(liveUsage.status, 200);
+    assert.equal(Number(liveUsage.body.live_concurrency_limit), 3);
+    assert.equal(Number(liveUsage.body.live_minutes_monthly_limit), 1);
+    assert.ok(Number(liveUsage.body.live_seconds_this_month) >= 60);
+
     const rotated = await request(
       `/api/v1/live-streams/${liveCreated.body.id}/rotate-key`,
       "POST",

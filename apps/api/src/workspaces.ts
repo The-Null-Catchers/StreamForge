@@ -116,7 +116,55 @@ export async function workspaceRoutes(app: FastifyInstance) {
       await access(req, req.params.id);
       return (
         await db.query(
-          "SELECT w.storage_limit,w.video_limit,(SELECT coalesce(sum(size),0) FROM videos WHERE workspace_id=w.id AND deleted_at IS NULL) AS source_bytes,(SELECT count(*) FROM videos WHERE workspace_id=w.id AND deleted_at IS NULL) AS videos FROM workspaces w WHERE w.id=$1",
+          `SELECT
+             w.storage_limit,
+             w.video_limit,
+             w.live_concurrency_limit,
+             w.live_minutes_monthly_limit,
+             (
+               SELECT coalesce(sum(size),0)
+               FROM videos
+               WHERE workspace_id=w.id
+                 AND deleted_at IS NULL
+             ) AS source_bytes,
+             (
+               SELECT count(*)
+               FROM videos
+               WHERE workspace_id=w.id
+                 AND deleted_at IS NULL
+             ) AS videos,
+             (
+               SELECT count(*)
+               FROM live_streams
+               WHERE workspace_id=w.id
+                 AND status='live'
+             ) AS active_live_streams,
+             (
+               coalesce(
+                 (SELECT sum(amount)
+                  FROM usage_records
+                  WHERE workspace_id=w.id
+                    AND kind='live_seconds'
+                    AND created_at>=date_trunc('month',now())),
+                 0
+               )
+               +
+               coalesce(
+                 (SELECT sum(
+                    greatest(
+                      0,
+                      extract(epoch FROM (now()-lses.started_at))
+                    )
+                  )
+                  FROM live_sessions lses
+                  JOIN live_streams lstr ON lstr.id=lses.stream_id
+                  WHERE lstr.workspace_id=w.id
+                    AND lses.ended_at IS NULL),
+                 0
+               )
+             )::bigint AS live_seconds_this_month
+           FROM workspaces w
+           WHERE w.id=$1`,
           [req.params.id],
         )
       ).rows[0];

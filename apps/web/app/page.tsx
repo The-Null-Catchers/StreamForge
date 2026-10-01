@@ -69,6 +69,10 @@ export default function Dashboard() {
     source_bytes: 0,
     storage_limit: 1,
     videos: 0,
+    active_live_streams: 0,
+    live_concurrency_limit: 0,
+    live_seconds_this_month: 0,
+    live_minutes_monthly_limit: 0,
   });
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -2088,6 +2092,25 @@ export default function Dashboard() {
                   <div className="eyebrow">REALTIME DELIVERY</div>
                   <h1>Live streams</h1>
                   <p>Publish with RTMP or SRT and deliver low-latency HLS.</p>
+                </div>
+              </div>
+              <div className="stats">
+                <div>
+                  <span>Active live streams</span>
+                  <strong>
+                    {Number(usage.active_live_streams)} /{" "}
+                    {Number(usage.live_concurrency_limit)}
+                  </strong>
+                  <small>Concurrent workspace quota</small>
+                </div>
+                <div>
+                  <span>Live usage this month</span>
+                  <strong>
+                    {Math.ceil(Number(usage.live_seconds_this_month) / 60)}m
+                  </strong>
+                  <small>
+                    of {Number(usage.live_minutes_monthly_limit)}m monthly
+                  </small>
                 </div>
               </div>
               <section className="panel">
