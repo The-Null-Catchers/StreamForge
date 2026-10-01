@@ -797,6 +797,24 @@ test(
         (await request(`/api/v1/videos/${v.id}/playback`)).status,
         401,
       );
+      const metricsResponse = await fetch("http://api:9091/metrics");
+      assert.equal(metricsResponse.status, 200);
+      const metricsText = await metricsResponse.text();
+      for (const metric of [
+        "streamforge_queue_jobs",
+        "streamforge_processing_jobs",
+        "streamforge_live_streams",
+        "streamforge_live_active_ingest",
+        "streamforge_source_storage_bytes",
+        "streamforge_output_storage_bytes",
+        "streamforge_worker_heartbeats",
+        "streamforge_metrics_refresh_success",
+      ])
+        assert.ok(
+          metricsText.includes(metric),
+          `missing operational metric: ${metric}`,
+        );
+
       token = savedToken;
       const refreshed = (
         await request("/api/v1/auth/refresh", "POST", {
