@@ -82,6 +82,7 @@ export default function Dashboard() {
   const [hooks, setHooks] = useState<any[]>([]);
   const [liveStreams, setLiveStreams] = useState<any[]>([]);
   const [liveCredential, setLiveCredential] = useState<any | null>(null);
+  const [liveDetails, setLiveDetails] = useState<Record<string, any>>({});
   const [analytics, setAnalytics] = useState<any>(null);
   const [analyticsDaily, setAnalyticsDaily] = useState<any[]>([]);
   const [analyticsRealtime, setAnalyticsRealtime] = useState<any>(null);
@@ -2102,6 +2103,7 @@ export default function Dashboard() {
                         body: JSON.stringify({
                           workspaceId: workspace,
                           name: String(form.get("name") ?? "").trim(),
+                          autoCreateVod: form.get("autoCreateVod") === "on",
                         }),
                       });
                       setLiveCredential(created);
@@ -2118,6 +2120,14 @@ export default function Dashboard() {
                   }}
                 >
                   <input name="name" placeholder="Live stream name" required />
+                  <label className="checkbox">
+                    <input
+                      name="autoCreateVod"
+                      type="checkbox"
+                      defaultChecked
+                    />
+                    Auto-create VOD after stream ends
+                  </label>
                   <button className="primary">Create stream</button>
                 </form>
                 {liveCredential && (
@@ -2148,58 +2158,155 @@ export default function Dashboard() {
                 )}
               </section>
               {liveStreams.map((stream) => (
-                <div className="resource-row" key={stream.id}>
-                  <Radio />
-                  <div>
-                    <strong>{stream.name}</strong>
-                    <p>
-                      {stream.status} · {stream.path}
-                      {stream.last_started_at
-                        ? ` · last started ${new Date(
-                            stream.last_started_at,
-                          ).toLocaleString()}`
-                        : ""}
-                    </p>
+                <div className="live-stream-card" key={stream.id}>
+                  <div className="resource-row">
+                    <Radio />
+                    <div>
+                      <strong>{stream.name}</strong>
+                      <p>
+                        {stream.status} · {stream.path}
+                        {stream.last_started_at
+                          ? ` · last started ${new Date(
+                              stream.last_started_at,
+                            ).toLocaleString()}`
+                          : ""}
+                      </p>
+                      <p>
+                        Auto VOD: {stream.auto_create_vod ? "On" : "Off"}
+                      </p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const p = await api(
+                            `/live-streams/${stream.id}/playback`,
+                          );
+                          await navigator.clipboard.writeText(p.hlsUrl);
+                          setNotice(
+                            "Signed HLS URL copied. It expires in 15 minutes.",
+                          );
+                        } catch (err) {
+                          setNotice((err as Error).message);
+                        }
+                      }}
+                      disabled={stream.status !== "live"}
+                    >
+                      Copy HLS
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await api(`/live-streams/${stream.id}`, {
+                            method: "PATCH",
+                            body: JSON.stringify({
+                              autoCreateVod: !stream.auto_create_vod,
+                            }),
+                          });
+                          setLiveStreams(
+                            await api(
+                              `/live-streams?workspaceId=${workspace}`,
+                            ),
+                          );
+                        } catch (err) {
+                          setNotice((err as Error).message);
+                        }
+                      }}
+                    >
+                      {stream.auto_create_vod ? "Disable Auto VOD" : "Enable Auto VOD"}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const detail = await api(
+                            `/live-streams/${stream.id}`,
+                          );
+                          setLiveDetails((current) => ({
+                            ...current,
+                            [stream.id]: detail,
+                          }));
+                        } catch (err) {
+                          setNotice((err as Error).message);
+                        }
+                      }}
+                    >
+                      Sessions
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const rotated = await api(
+                            `/live-streams/${stream.id}/rotate-key`,
+                            { method: "POST", body: JSON.stringify({}) },
+                          );
+                          setLiveCredential({
+                            id: stream.id,
+                            ingest: {
+                              rtmpServer: "",
+                              rtmpStreamKey: rotated.rtmpStreamKey,
+                              srtUrl: rotated.srtUrl,
+                            },
+                          });
+                          setNotice(
+                            "Stream key rotated. Copy the new key now.",
+                          );
+                        } catch (err) {
+                          setNotice((err as Error).message);
+                        }
+                      }}
+                    >
+                      Rotate key
+                    </button>
                   </div>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const p = await api(
-                          `/live-streams/${stream.id}/playback`,
-                        );
-                        await navigator.clipboard.writeText(p.hlsUrl);
-                        setNotice("Signed HLS URL copied. It expires in 15 minutes.");
-                      } catch (err) {
-                        setNotice((err as Error).message);
-                      }
-                    }}
-                    disabled={stream.status !== "live"}
-                  >
-                    Copy HLS
-                  </button>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const rotated = await api(
-                          `/live-streams/${stream.id}/rotate-key`,
-                          { method: "POST", body: JSON.stringify({}) },
-                        );
-                        setLiveCredential({
-                          id: stream.id,
-                          ingest: {
-                            rtmpServer: "",
-                            rtmpStreamKey: rotated.rtmpStreamKey,
-                            srtUrl: rotated.srtUrl,
-                          },
-                        });
-                        setNotice("Stream key rotated. Copy the new key now.");
-                      } catch (err) {
-                        setNotice((err as Error).message);
-                      }
-                    }}
-                  >
-                    Rotate key
-                  </button>
+                  {liveDetails[stream.id]?.sessions?.length ? (
+                    <div className="live-sessions">
+                      {liveDetails[stream.id].sessions.map((session: any) => (
+                        <div key={session.id}>
+                          <div>
+                            <strong>
+                              {new Date(session.started_at).toLocaleString()}
+                            </strong>
+                            <span>
+                              {session.promotion_status}
+                              {session.recording_video_id
+                                ? ` · VOD ${session.recording_video_id}`
+                                : ""}
+                            </span>
+                            {session.promotion_error && (
+                              <small>{session.promotion_error}</small>
+                            )}
+                          </div>
+                          {session.ended_at &&
+                            session.promotion_status !== "complete" && (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await api(
+                                      `/live-streams/${stream.id}/sessions/${session.id}/retry-promotion`,
+                                      {
+                                        method: "POST",
+                                        body: JSON.stringify({}),
+                                      },
+                                    );
+                                    const detail = await api(
+                                      `/live-streams/${stream.id}`,
+                                    );
+                                    setLiveDetails((current) => ({
+                                      ...current,
+                                      [stream.id]: detail,
+                                    }));
+                                    setNotice("VOD promotion queued.");
+                                  } catch (err) {
+                                    setNotice((err as Error).message);
+                                  }
+                                }}
+                              >
+                                Retry VOD
+                              </button>
+                            )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ))}
               {!liveStreams.length && (
