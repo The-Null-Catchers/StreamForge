@@ -13,6 +13,7 @@ export const queueNames = [
   "webhooks",
   "analytics",
   "ai",
+  "live-import",
   "cleanup",
 ] as const;
 export type QueueName = (typeof queueNames)[number];
