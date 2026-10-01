@@ -260,7 +260,6 @@ export class StreamForge {
     create: (input: {
       workspaceId: string;
       name: string;
-      autoCreateVod?: boolean;
     }) =>
       this.request<Playlist>("/playlists", {
         method: "POST",
