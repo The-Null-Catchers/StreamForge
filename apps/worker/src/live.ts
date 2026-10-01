@@ -69,9 +69,26 @@ export async function syncLiveStreams() {
            SET ended_at=now(),
                promotion_status=$2
            WHERE stream_id=$1 AND ended_at IS NULL
-           RETURNING id`,
+           RETURNING
+             id,
+             greatest(
+               0,
+               floor(extract(epoch FROM (ended_at-started_at)))
+             )::bigint AS duration_seconds`,
           [stream.id, stream.auto_create_vod ? "queued" : "skipped"],
         );
+        for (const session of ended.rows)
+          await client.query(
+            `INSERT INTO usage_records(
+               workspace_id,kind,amount,idempotency_key
+             ) VALUES($1,'live_seconds',$2,$3)
+             ON CONFLICT DO NOTHING`,
+            [
+              stream.workspace_id,
+              Number(session.duration_seconds),
+              `live-session:${session.id}`,
+            ],
+          );
         if (stream.auto_create_vod)
           for (const session of ended.rows)
             await enqueue(client, "live-import", { sessionId: session.id });
