@@ -422,3 +422,38 @@ Prometheus loads `infra/monitoring/alerts.yml` and scrapes the internal API metr
 Grafana binds to `127.0.0.1:3001` by default and requires the configured admin credentials. Prometheus also binds to loopback only. Neither service is routed through the public Caddy listener.
 
 Before production deployment, replace `GRAFANA_ADMIN_PASSWORD` and tune storage/queue alert thresholds to match the actual workspace plans and capacity.
+
+
+## OpenAPI contract
+
+StreamForge ships a source-controlled OpenAPI 3.1 contract:
+
+`docs/openapi.json`
+
+A running API serves the same contract publicly at:
+
+`GET /api/openapi.json`
+
+The contract covers the main developer workflows including videos, resumable uploads, playback, analytics, transcript search, automatic transcription, AI helpers, playlists, live streaming, API keys, webhooks, workspace usage, and operations diagnostics.
+
+CI runs:
+
+```bash
+npm run openapi:validate
+```
+
+The validator checks the OpenAPI version, SDK/spec version alignment, authentication scheme, unique operation IDs, minimum path/operation coverage, and required core operations.
+
+## TypeScript SDK package
+
+The SDK source is in `packages/sdk` and builds into its own package-local `dist/` directory.
+
+Validate the publish artifact with:
+
+```bash
+npm run sdk:pack
+```
+
+This runs `npm pack --dry-run` after the package build, verifying that the tarball contains the JavaScript output, TypeScript declarations, and README without relying on monorepo-relative paths.
+
+The repository also contains `.github/workflows/sdk-release.yml`. It publishes tagged `sdk-v*` releases when a valid `NPM_TOKEN` with access to the configured npm scope is present. The repository does not claim that the package is already published to npm.
