@@ -89,6 +89,69 @@ export async function liveRoutes(app: FastifyInstance) {
             )
           ).rows[0];
           if (locked.status !== "live") {
+            const quota = (
+              await client.query(
+                `SELECT
+                   live_concurrency_limit,
+                   live_minutes_monthly_limit
+                 FROM workspaces
+                 WHERE id=$1
+                 FOR UPDATE`,
+                [locked.workspace_id],
+              )
+            ).rows[0];
+            if (!quota) throw new ApiError(404, "WORKSPACE_NOT_FOUND");
+
+            const activeStreams = Number(
+              (
+                await client.query(
+                  `SELECT count(*)::int AS count
+                   FROM live_streams
+                   WHERE workspace_id=$1
+                     AND status='live'
+                     AND id<>$2`,
+                  [locked.workspace_id, stream.id],
+                )
+              ).rows[0].count,
+            );
+            if (activeStreams >= Number(quota.live_concurrency_limit))
+              throw new ApiError(403, "LIVE_CONCURRENCY_QUOTA_EXCEEDED");
+
+            const liveUsage = (
+              await client.query(
+                `SELECT
+                   coalesce(
+                     (SELECT sum(amount)
+                      FROM usage_records
+                      WHERE workspace_id=$1
+                        AND kind='live_seconds'
+                        AND created_at>=date_trunc('month',now())),
+                     0
+                   )::bigint
+                   +
+                   coalesce(
+                     (SELECT sum(
+                        greatest(
+                          0,
+                          extract(epoch FROM (now()-lses.started_at))
+                        )
+                      )
+                      FROM live_sessions lses
+                      JOIN live_streams lstr ON lstr.id=lses.stream_id
+                      WHERE lstr.workspace_id=$1
+                        AND lses.ended_at IS NULL),
+                     0
+                   )::bigint AS seconds`,
+                [locked.workspace_id],
+              )
+            ).rows[0];
+            if (
+              Number(quota.live_minutes_monthly_limit) > 0 &&
+              Number(liveUsage.seconds) >=
+                Number(quota.live_minutes_monthly_limit) * 60
+            )
+              throw new ApiError(403, "LIVE_MONTHLY_QUOTA_EXCEEDED");
+
             await client.query(
               `UPDATE live_streams
                SET status='live',last_started_at=now(),updated_at=now()
