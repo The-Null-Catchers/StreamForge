@@ -278,3 +278,52 @@ HLS is reverse-proxied through Caddy under `/live/*`. Playback requires a Stream
 A successful publisher authentication opens a StreamForge live session and emits `live.started`. The worker polls the MediaMTX Control API and closes sessions that disappear, emitting `live.ended`. Recording is enabled in MediaMTX and stored in the isolated `live_recordings` volume as fragmented MP4 segments. MediaMTX supports automatic recording and its Control API exposes recordings by path.
 
 Live-to-VOD import into object storage remains separate work; recordings are not currently promoted into the normal VOD video pipeline automatically.
+
+
+### Live-to-VOD promotion
+
+Live streams can automatically promote completed recordings into normal StreamForge VOD assets.
+
+When a live session ends:
+
+1. the session moves to `queued` promotion state,
+2. the durable outbox emits a `live-import` job,
+3. the worker finds the fMP4 recording segments that overlap the session window,
+4. multiple segments are concatenated losslessly with FFmpeg,
+5. the recording is probed and checksummed,
+6. workspace storage and video quotas are revalidated,
+7. the source is copied into object storage,
+8. a normal private video is created,
+9. the existing `video-transcode` pipeline continues with renditions, thumbnails and HLS packaging.
+
+Completed promotions emit `live.vod.created` and create an in-app notification.
+
+Create streams with promotion disabled when required:
+
+```json
+{
+  "workspaceId": "workspace-uuid",
+  "name": "Launch event",
+  "autoCreateVod": false
+}
+```
+
+Update the setting later:
+
+`PATCH /api/v1/live-streams/:id`
+
+```json
+{
+  "autoCreateVod": true
+}
+```
+
+Each live-session response includes `promotion_status`, `recording_video_id`,
+`promotion_error`, and `promoted_at`.
+
+Failed or skipped promotions can be explicitly requeued:
+
+`POST /api/v1/live-streams/:id/sessions/:sessionId/retry-promotion`
+
+Promotion failures are isolated from the live stream and from the normal VOD media
+pipeline. A failed import does not mark an unrelated video as failed.
