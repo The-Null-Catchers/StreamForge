@@ -2414,7 +2414,7 @@ export default function Dashboard() {
                       ["Storage", operations.dependencies?.storage ?? "unknown"],
                       [
                         "Workers",
-                        String(operations.dependencies?.workers ?? 0),
+                        operations.dependencies?.workers ?? "unknown",
                       ],
                     ].map(([label, value]) => (
                       <div key={label}>
@@ -2423,23 +2423,6 @@ export default function Dashboard() {
                       </div>
                     ))}
                   </div>
-
-                  <section className="panel">
-                    <h3>Queue health</h3>
-                    <div className="ops-grid">
-                      {operations.queues?.map((queue: any) => (
-                        <div className="ops-card" key={queue.name}>
-                          <strong>{queue.name}</strong>
-                          <span>
-                            {queue.active} active · {queue.waiting} waiting
-                          </span>
-                          <span>
-                            {queue.delayed} delayed · {queue.failed} failed
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
 
                   <div className="detail-grid">
                     <section className="panel">
