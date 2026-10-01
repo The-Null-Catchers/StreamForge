@@ -29,7 +29,7 @@ export async function syncLiveStreams() {
   await transaction(async (client) => {
     const streams = (
       await client.query(
-        `SELECT id,workspace_id,path,status
+        `SELECT id,workspace_id,path,status,auto_create_vod
          FROM live_streams
          WHERE status<>'disabled'
          FOR UPDATE`,
@@ -64,13 +64,15 @@ export async function syncLiveStreams() {
         );
         const ended = await client.query(
           `UPDATE live_sessions
-           SET ended_at=now(),promotion_status='queued'
+           SET ended_at=now(),
+               promotion_status=$2
            WHERE stream_id=$1 AND ended_at IS NULL
            RETURNING id`,
-          [stream.id],
+          [stream.id, stream.auto_create_vod ? "queued" : "skipped"],
         );
-        for (const session of ended.rows)
-          await enqueue(client, "live-import", { sessionId: session.id });
+        if (stream.auto_create_vod)
+          for (const session of ended.rows)
+            await enqueue(client, "live-import", { sessionId: session.id });
         await event(client, stream.workspace_id, stream.id, "live.ended", "streamId");
       }
     }
