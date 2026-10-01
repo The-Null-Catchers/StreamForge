@@ -400,7 +400,6 @@ The response contains:
 
 - database, Redis and object-storage health,
 - recent worker-heartbeat count,
-- BullMQ waiting/active/delayed/failed counts by queue,
 - workspace processing-job states,
 - live-stream state and active-ingest counts,
 - recent failed processing jobs,
