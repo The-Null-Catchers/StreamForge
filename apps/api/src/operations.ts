@@ -36,12 +36,12 @@ export async function operationsRoutes(app: FastifyInstance) {
       const [processing, live, failedJobs, failedWebhooks, usage] =
         await Promise.all([
           db.query(
-            `SELECT status,count(*)::int AS count
+            `SELECT pj.status,count(*)::int AS count
              FROM processing_jobs pj
              JOIN videos v ON v.id=pj.video_id
              WHERE v.workspace_id=$1
-             GROUP BY status
-             ORDER BY status`,
+             GROUP BY pj.status
+             ORDER BY pj.status`,
             [req.params.id],
           ),
           db.query(
@@ -53,7 +53,7 @@ export async function operationsRoutes(app: FastifyInstance) {
             [req.params.id],
           ),
           db.query(
-            `SELECT pj.id,pj.video_id,pj.stage,pj.status,pj.error_code,pj.updated_at
+            `SELECT pj.id,pj.video_id,pj.queue,pj.status,pj.error_code,pj.updated_at
              FROM processing_jobs pj
              JOIN videos v ON v.id=pj.video_id
              WHERE v.workspace_id=$1 AND pj.status='failed'
