@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { db } from "../../../packages/shared/src/db.js";
-import { redis, queues } from "../../../packages/shared/src/queues.js";
+import { redis } from "../../../packages/shared/src/queues.js";
 import { storage } from "../../../packages/shared/src/storage.js";
 import { access, uuid } from "./context.js";
 
@@ -32,24 +32,6 @@ export async function operationsRoutes(app: FastifyInstance) {
           )
           .catch(() => []),
       ]);
-
-      const queueEntries = await Promise.all(
-        Object.entries(queues).map(async ([name, queue]) => {
-          const counts = await queue.getJobCounts(
-            "waiting",
-            "active",
-            "delayed",
-            "failed",
-          );
-          return {
-            name,
-            waiting: Number(counts.waiting ?? 0),
-            active: Number(counts.active ?? 0),
-            delayed: Number(counts.delayed ?? 0),
-            failed: Number(counts.failed ?? 0),
-          };
-        }),
-      );
 
       const [processing, live, failedJobs, failedWebhooks, usage] =
         await Promise.all([
@@ -118,9 +100,8 @@ export async function operationsRoutes(app: FastifyInstance) {
           database,
           redis: redisState,
           storage: storageState,
-          workers: workerIds.length,
+          workers: workerIds.length ? "ok" : "error",
         },
-        queues: queueEntries,
         processing: processing.rows,
         live: live.rows,
         recentFailures: {
