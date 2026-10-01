@@ -1283,3 +1283,25 @@ code {
     flex-direction: column;
   }
 }
+
+.ops-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+}
+.ops-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #f8fafb;
+}
+.ops-card strong {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.ops-card span {
+  font-size: 10px;
+  color: var(--muted);
+}
