@@ -15,6 +15,7 @@ import { rollupAnalytics } from "./analytics.js";
 import { transcriptionJob } from "./transcription.js";
 import { aiGenerationJob } from "./ai.js";
 import { syncLiveStreams } from "./live.js";
+import { liveImportJob } from "./live-import.js";
 const logger = pino();
 const workerId = randomUUID();
 let stopping = false;
@@ -28,6 +29,7 @@ const names: QueueName[] = [
   "webhooks",
   "analytics",
   "ai",
+  "live-import",
   "cleanup",
 ];
 const workers = names.map((name) => {
@@ -43,6 +45,7 @@ const workers = names.map((name) => {
         await rollupAnalytics(job.data.videoId, job.data.day);
       else if (name === "subtitle-processing") await transcriptionJob(job);
       else if (name === "ai") await aiGenerationJob(job);
+      else if (name === "live-import") await liveImportJob(job);
       else await mediaJob(job);
     },
     {
@@ -82,9 +85,21 @@ const workers = names.map((name) => {
         );
         return;
       }
+      if (name === "live-import" && job.data.sessionId) {
+        await c.query(
+          `UPDATE live_sessions
+           SET promotion_status='failed',promotion_error=$2
+           WHERE id=$1 AND promotion_status<>'complete'`,
+          [
+            job.data.sessionId,
+            String(error?.message ?? "LIVE_IMPORT_FAILED").slice(0, 120),
+          ],
+        );
+        return;
+      }
       if (
         job.data.videoId &&
-        !["cleanup", "analytics", "ai", "webhooks"].includes(name)
+        !["cleanup", "analytics", "ai", "live-import", "webhooks"].includes(name)
       ) {
         await c.query(
           "UPDATE processing_jobs SET status='dead_letter',error_code='PROCESSING_FAILED' WHERE id=$1",
