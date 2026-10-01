@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { SignJWT, jwtVerify } from "jose";
 import { z } from "zod";
 import { db, transaction } from "../../../packages/shared/src/db.js";
-import { event } from "../../../packages/shared/src/events.js";
+import { enqueue, event } from "../../../packages/shared/src/events.js";
 import { hash, opaque } from "../../../packages/shared/src/security.js";
 import { config } from "../../../packages/config/src/index.js";
 import {
