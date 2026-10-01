@@ -1,5 +1,5 @@
 import { transaction } from "../../../packages/shared/src/db.js";
-import { event } from "../../../packages/shared/src/events.js";
+import { enqueue, event } from "../../../packages/shared/src/events.js";
 import { config } from "../../../packages/config/src/index.js";
 
 type MediaMtxPath = {
@@ -62,12 +62,15 @@ export async function syncLiveStreams() {
            WHERE id=$1`,
           [stream.id],
         );
-        await client.query(
+        const ended = await client.query(
           `UPDATE live_sessions
-           SET ended_at=now()
-           WHERE stream_id=$1 AND ended_at IS NULL`,
+           SET ended_at=now(),promotion_status='queued'
+           WHERE stream_id=$1 AND ended_at IS NULL
+           RETURNING id`,
           [stream.id],
         );
+        for (const session of ended.rows)
+          await enqueue(client, "live-import", { sessionId: session.id });
         await event(client, stream.workspace_id, stream.id, "live.ended", "streamId");
       }
     }
