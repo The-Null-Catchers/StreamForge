@@ -2544,7 +2544,9 @@ export default function Dashboard() {
                             <div>
                               <strong>{row.event}</strong>
                               <p>
-                                {row.last_error || "Delivery failed"} · attempt{" "}
+                                {row.response_status
+                                  ? `HTTP ${row.response_status}`
+                                  : "Delivery failed"} · attempt{" "}
                                 {row.attempts}
                               </p>
                             </div>
