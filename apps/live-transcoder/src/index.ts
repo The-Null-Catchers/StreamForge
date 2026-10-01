@@ -120,6 +120,8 @@ async function startTranscoder(stream: {
   await rm(root, { recursive: true, force: true });
   await mkdir(root, { recursive: true });
   await mkdir(recordRoot, { recursive: true });
+  for (const variant of variants)
+    await mkdir(join(root, variant.name), { recursive: true });
 
   const segmentSeconds = 2;
   const listSize = Math.max(
