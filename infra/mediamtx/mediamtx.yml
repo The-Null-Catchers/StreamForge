@@ -11,7 +11,8 @@ authHTTPExclude:
   - action: metrics
   - action: pprof
 
-rtsp: false
+rtsp: true
+rtspAddress: :8554
 rtmp: true
 rtmpAddress: :1935
 hls: true
@@ -22,7 +23,8 @@ srtAddress: :8890
 
 pathDefaults:
   source: publisher
-  record: true
+  overridePublisher: false
+  record: false
   recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f
   recordFormat: fmp4
   recordPartDuration: 1s

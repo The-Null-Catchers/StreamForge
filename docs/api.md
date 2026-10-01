@@ -327,3 +327,39 @@ Failed or skipped promotions can be explicitly requeued:
 
 Promotion failures are isolated from the live stream and from the normal VOD media
 pipeline. A failed import does not mark an unrelated video as failed.
+
+
+### Live resilience and adaptive HLS
+
+Each live stream now exposes independent primary and backup ingest credentials. Publishers can stay connected to both inputs; StreamForge always prefers the primary input and automatically switches the transcoder to backup when primary disappears.
+
+Create a stream with a live profile and DVR window:
+
+```json
+{
+  "workspaceId": "workspace-uuid",
+  "name": "Launch event",
+  "liveProfile": "standard",
+  "dvrWindowSeconds": 600,
+  "autoCreateVod": true
+}
+```
+
+Profiles:
+
+- `source` — source-quality HLS with no video re-encode.
+- `standard` — adaptive ladder up to 360p and 720p, constrained by source height.
+- `high` — adaptive ladder up to 360p, 720p and 1080p, constrained by source height.
+
+The dedicated `live-transcoder` service reads the selected MediaMTX input over the internal RTSP network and writes a master HLS playlist plus variant playlists into the isolated `live_hls` volume. FFmpeg runs outside the API and VOD worker processes with separate CPU and memory limits.
+
+DVR retention is implemented through the HLS media playlist length. StreamForge uses 2-second segments and derives the retained segment count from each stream's `dvrWindowSeconds` value. MediaMTX documents that retained HLS segments allow clients to seek backward through a live stream. The StreamForge transcoder preserves this window when failing over between primary and backup feeds.
+
+Playback URLs put the short-lived live JWT in the URL path rather than only on the master-playlist query string. Relative variant and segment requests therefore retain authorization. Caddy validates the token through `GET /api/v1/live/playback-auth` and strips the token portion before serving files from the HLS volume.
+
+Failover lifecycle webhooks:
+
+- `live.failover` — primary disappeared and backup became active.
+- `live.primary.restored` — primary returned and became active again.
+
+The final program feed is also segmented into hourly MP4 recordings. Live-to-VOD promotion imports this program recording, so concurrently connected redundant ingest feeds never produce duplicate VOD content.

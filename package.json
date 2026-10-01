@@ -13,6 +13,7 @@
   "scripts": {
     "api": "node --import tsx apps/api/src/index.ts",
     "worker": "node --import tsx apps/worker/src/index.ts",
+    "live:transcoder": "node --import tsx apps/live-transcoder/src/index.ts",
     "migrate": "node --import tsx packages/shared/src/migrate.ts",
     "typecheck": "tsc --noEmit && npm run typecheck -w apps/web",
     "lint": "eslint .",

@@ -2104,6 +2104,12 @@ export default function Dashboard() {
                           workspaceId: workspace,
                           name: String(form.get("name") ?? "").trim(),
                           autoCreateVod: form.get("autoCreateVod") === "on",
+                          dvrWindowSeconds: Number(
+                            form.get("dvrWindowSeconds") ?? 600,
+                          ),
+                          liveProfile: String(
+                            form.get("liveProfile") ?? "standard",
+                          ),
                         }),
                       });
                       setLiveCredential(created);
@@ -2120,6 +2126,17 @@ export default function Dashboard() {
                   }}
                 >
                   <input name="name" placeholder="Live stream name" required />
+                  <select name="liveProfile" defaultValue="standard">
+                    <option value="source">Source quality</option>
+                    <option value="standard">Standard · 360p / 720p</option>
+                    <option value="high">High · up to 1080p</option>
+                  </select>
+                  <select name="dvrWindowSeconds" defaultValue="600">
+                    <option value="120">2 minute DVR</option>
+                    <option value="300">5 minute DVR</option>
+                    <option value="600">10 minute DVR</option>
+                    <option value="1800">30 minute DVR</option>
+                  </select>
                   <label className="checkbox">
                     <input
                       name="autoCreateVod"
@@ -2138,21 +2155,33 @@ export default function Dashboard() {
                       <code>{liveCredential.ingest?.rtmpServer}</code>
                     </label>
                     <label>
-                      Stream key
-                      <code>{liveCredential.ingest?.rtmpStreamKey}</code>
+                      Primary stream key
+                      <code>
+                        {liveCredential.ingest?.primaryRtmpStreamKey}
+                      </code>
                     </label>
                     <label>
-                      SRT URL
-                      <code>{liveCredential.ingest?.srtUrl}</code>
+                      Backup stream key
+                      <code>
+                        {liveCredential.ingest?.backupRtmpStreamKey}
+                      </code>
+                    </label>
+                    <label>
+                      Primary SRT URL
+                      <code>{liveCredential.ingest?.primarySrtUrl}</code>
+                    </label>
+                    <label>
+                      Backup SRT URL
+                      <code>{liveCredential.ingest?.backupSrtUrl}</code>
                     </label>
                     <button
                       onClick={() =>
                         navigator.clipboard.writeText(
-                          liveCredential.ingest?.rtmpStreamKey ?? "",
+                          liveCredential.ingest?.primaryRtmpStreamKey ?? "",
                         )
                       }
                     >
-                      Copy stream key
+                      Copy primary key
                     </button>
                   </div>
                 )}
@@ -2172,7 +2201,9 @@ export default function Dashboard() {
                           : ""}
                       </p>
                       <p>
-                        Auto VOD: {stream.auto_create_vod ? "On" : "Off"}
+                        Auto VOD: {stream.auto_create_vod ? "On" : "Off"} ·
+                        DVR {Math.round(Number(stream.dvr_window_seconds) / 60)}m ·
+                        {stream.live_profile} · active {stream.active_ingest ?? "none"}
                       </p>
                     </div>
                     <button
@@ -2242,8 +2273,12 @@ export default function Dashboard() {
                             id: stream.id,
                             ingest: {
                               rtmpServer: "",
-                              rtmpStreamKey: rotated.rtmpStreamKey,
-                              srtUrl: rotated.srtUrl,
+                              primaryRtmpStreamKey:
+                                rotated.primaryRtmpStreamKey,
+                              backupRtmpStreamKey:
+                                rotated.backupRtmpStreamKey,
+                              primarySrtUrl: rotated.primarySrtUrl,
+                              backupSrtUrl: rotated.backupSrtUrl,
                             },
                           });
                           setNotice(

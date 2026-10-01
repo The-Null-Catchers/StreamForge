@@ -59,13 +59,18 @@ const schema = z.object({
   LIVE_PUBLIC_RTMP_URL: z.string().default("rtmp://localhost:1935/live"),
   LIVE_PUBLIC_SRT_URL: z.string().default("srt://localhost:8890"),
   LIVE_PUBLIC_HLS_URL: z.url().default("http://localhost:8080/live"),
+  LIVE_TRANSCODER_TOKEN: z.string().min(32).default("replace-with-live-transcoder-secret"),
+  LIVE_HLS_ROOT: z.string().default("/live_hls"),
+  LIVE_POLL_INTERVAL_MS: z.coerce.number().int().min(500).max(10000).default(2000),
 });
 export const config = schema.parse(process.env);
 if (
   config.NODE_ENV === "production" &&
-  [config.JWT_SECRET, config.PLAYBACK_SECRET].some((s) =>
-    s.includes("replace-with"),
-  )
+  [
+    config.JWT_SECRET,
+    config.PLAYBACK_SECRET,
+    config.LIVE_TRANSCODER_TOKEN,
+  ].some((s) => s.includes("replace-with"))
 )
   throw Error("Configure production secrets");
 

@@ -70,9 +70,14 @@ test(
     });
     assert.equal(liveCreated.status, 201, JSON.stringify(liveCreated.body));
     assert.match(liveCreated.body.streamKey, /^sf_stream_/);
-    assert.match(liveCreated.body.ingest.rtmpStreamKey, new RegExp(liveCreated.body.id));
+    assert.match(
+      liveCreated.body.ingest.primaryRtmpStreamKey,
+      new RegExp(liveCreated.body.id),
+    );
+    assert.match(liveCreated.body.backupStreamKey, /^sf_stream_/);
 
-    const livePath = `live/${liveCreated.body.id}`;
+    const livePath = `live/${liveCreated.body.id}/primary`;
+    const backupLivePath = `live/${liveCreated.body.id}/backup`;
     const badPublishAuth = await fetch(base + "/api/v1/live/auth", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -109,23 +114,33 @@ test(
       `/api/v1/live-streams/${liveCreated.body.id}/playback`,
     );
     assert.equal(livePlayback.status, 200, JSON.stringify(livePlayback.body));
-    assert.match(livePlayback.body.hlsUrl, /index\.m3u8\?token=/);
+    assert.match(livePlayback.body.hlsUrl, /\/master\.m3u8$/);
 
-    const playbackAuth = await fetch(base + "/api/v1/live/auth", {
+    const playbackAuth = await fetch(
+      base + "/api/v1/live/playback-auth",
+      {
+        headers: {
+          "X-Forwarded-Uri": new URL(livePlayback.body.hlsUrl).pathname,
+        },
+      },
+    );
+    assert.equal(playbackAuth.status, 204);
+
+    const backupPublishAuth = await fetch(base + "/api/v1/live/auth", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         user: "",
         password: "",
-        token: livePlayback.body.token,
-        action: "playback",
-        path: livePath,
-        protocol: "hls",
-        id: "integration-reader",
+        token: liveCreated.body.backupStreamKey,
+        action: "publish",
+        path: backupLivePath,
+        protocol: "srt",
+        id: "integration-backup-publisher",
         query: "",
       }),
     });
-    assert.equal(playbackAuth.status, 204);
+    assert.equal(backupPublishAuth.status, 204);
 
     const rotated = await request(
       `/api/v1/live-streams/${liveCreated.body.id}/rotate-key`,

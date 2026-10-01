@@ -104,6 +104,21 @@ services:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
       storage-init: { condition: service_completed_successfully }
+  live-transcoder:
+    <<: *app
+    image: streamforge-worker:local
+    build: { context: ., dockerfile: infra/docker/Dockerfile, target: worker }
+    command: [npm, run, live:transcoder]
+    volumes:
+      - "live_recordings:/recordings"
+      - "live_hls:/live_hls"
+    mem_limit: 4g
+    cpus: 4
+    pids_limit: 512
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      api: { condition: service_healthy }
+      mediamtx: { condition: service_started }
   web:
     <<: *app
     build: { context: ., dockerfile: infra/docker/Dockerfile, target: web }
@@ -111,7 +126,10 @@ services:
   caddy:
     image: caddy:2-alpine
     ports: ["8080:80"]
-    volumes: ["./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro", "caddy:/data"]
+    volumes:
+      - "./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
+      - "caddy:/data"
+      - "live_hls:/srv/live_hls:ro"
     depends_on: [web, api, mediamtx]
     networks: [internal]
     restart: unless-stopped
@@ -143,3 +161,4 @@ volumes:
   minio:
   caddy:
   live_recordings:
+  live_hls:

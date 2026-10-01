@@ -365,14 +365,23 @@ export class StreamForge {
       this.request<any[]>(
         `/live-streams?workspaceId=${encodeURIComponent(workspaceId)}`,
       ),
-    create: (input: { workspaceId: string; name: string }) =>
+    create: (input: {
+      workspaceId: string;
+      name: string;
+      autoCreateVod?: boolean;
+      dvrWindowSeconds?: number;
+      liveProfile?: "source" | "standard" | "high";
+    }) =>
       this.request<{
         id: string;
         streamKey: string;
+        backupStreamKey: string;
         ingest: {
           rtmpServer: string;
-          rtmpStreamKey: string;
-          srtUrl: string;
+          primaryRtmpStreamKey: string;
+          backupRtmpStreamKey: string;
+          primarySrtUrl: string;
+          backupSrtUrl: string;
         };
       }>("/live-streams", {
         method: "POST",
@@ -382,7 +391,12 @@ export class StreamForge {
       this.request<any>(`/live-streams/${encodeURIComponent(id)}`),
     update: (
       id: string,
-      input: { name?: string; autoCreateVod?: boolean },
+      input: {
+        name?: string;
+        autoCreateVod?: boolean;
+        dvrWindowSeconds?: number;
+        liveProfile?: "source" | "standard" | "high";
+      },
     ) =>
       this.request(`/live-streams/${encodeURIComponent(id)}`, {
         method: "PATCH",
