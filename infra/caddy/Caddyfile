@@ -12,6 +12,12 @@
     flush_interval -1
   }
   @live path /live/*
-  reverse_proxy @live mediamtx:8888
+  handle @live {
+    forward_auth api:4000 {
+      uri /api/v1/live/playback-auth
+    }
+    root * /srv/live_hls
+    file_server
+  }
   reverse_proxy web:3000
 }
