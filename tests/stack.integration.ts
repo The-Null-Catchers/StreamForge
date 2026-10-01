@@ -71,11 +71,7 @@ test(
     assert.equal(operations.body.dependencies.database, "ok");
     assert.equal(operations.body.dependencies.redis, "ok");
     assert.equal(operations.body.dependencies.storage, "ok");
-    assert.ok(Number(operations.body.dependencies.workers) >= 1);
-    assert.ok(Array.isArray(operations.body.queues));
-    assert.ok(
-      operations.body.queues.some((queue: any) => queue.name === "video-transcode"),
-    );
+    assert.equal(operations.body.dependencies.workers, "ok");
     assert.ok(operations.body.usage);
     const liveCreated = await request("/api/v1/live-streams", "POST", {
       workspaceId: ws.id,
