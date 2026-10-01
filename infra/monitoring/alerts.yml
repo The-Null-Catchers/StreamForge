@@ -1,0 +1,66 @@
+groups:
+  - name: streamforge-core
+    interval: 30s
+    rules:
+      - alert: StreamForgeMetricsRefreshFailed
+        expr: streamforge_metrics_refresh_success < 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "StreamForge operational metrics refresh is failing"
+          description: "The API can serve /metrics but operational gauges have not refreshed successfully for 2 minutes."
+
+      - alert: StreamForgeNoWorkers
+        expr: streamforge_worker_heartbeats < 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No StreamForge workers are reporting heartbeats"
+          description: "Background media processing may be unavailable."
+
+      - alert: StreamForgeQueueBacklog
+        expr: sum by (queue) (streamforge_queue_jobs{state=~"waiting|delayed"}) > 25
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "StreamForge queue backlog is elevated"
+          description: "Queue {{ $labels.queue }} has more than 25 waiting or delayed jobs for 10 minutes."
+
+      - alert: StreamForgeQueueFailures
+        expr: sum by (queue) (streamforge_queue_jobs{state="failed"}) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "StreamForge queue failures are accumulating"
+          description: "Queue {{ $labels.queue }} has more than 5 failed jobs."
+
+      - alert: StreamForgeProcessingFailures
+        expr: streamforge_processing_jobs{status="failed"} > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Media processing failures are elevated"
+          description: "More than 5 persisted processing jobs are currently failed."
+
+      - alert: StreamForgeLiveFailoverActive
+        expr: streamforge_live_active_ingest{ingest="backup"} > 0
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "One or more live streams are on backup ingest"
+          description: "At least one live stream has failed over from primary to backup ingest."
+
+      - alert: StreamForgeSourceStorageHigh
+        expr: streamforge_source_storage_bytes > 500000000000
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Source storage usage is high"
+          description: "Source media storage is above 500 GB. Tune this threshold for the production plan."
