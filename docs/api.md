@@ -222,3 +222,59 @@ Provider configuration:
 - `AI_MAX_TRANSCRIPT_CHARS=60000`
 
 Jobs are dispatched through the durable outbox to the dedicated `ai` BullMQ queue. AI failures are isolated from the media processing lifecycle and never mark the underlying video as failed.
+
+
+## Live ingest
+
+StreamForge uses MediaMTX as the protocol edge while StreamForge remains the source of truth for workspace permissions, hashed stream keys, session state and webhooks. MediaMTX supports external HTTP authentication and exposes RTMP, SRT, HLS and a Control API.
+
+Create a stream:
+
+`POST /api/v1/live-streams`
+
+```json
+{
+  "workspaceId": "workspace-uuid",
+  "name": "Launch event"
+}
+```
+
+The response contains the stream key and ingest URLs once. Only the SHA-256 hash of the stream key is persisted.
+
+List workspace streams:
+
+`GET /api/v1/live-streams?workspaceId=:workspaceId`
+
+Inspect a stream and recent sessions:
+
+`GET /api/v1/live-streams/:id`
+
+Rotate the publish key:
+
+`POST /api/v1/live-streams/:id/rotate-key`
+
+Generate a short-lived signed HLS playback URL:
+
+`GET /api/v1/live-streams/:id/playback`
+
+Disable a stream:
+
+`DELETE /api/v1/live-streams/:id`
+
+### OBS / RTMP
+
+Use the returned `rtmpServer` as the server and `rtmpStreamKey` as the stream key. MediaMTX accepts tokens on RTMP URLs and supports external HTTP authorization.
+
+### SRT
+
+The API returns an SRT URL that encodes the MediaMTX publish stream ID and stream credential. MediaMTX supports SRT publish URLs and credential-bearing stream IDs.
+
+### HLS
+
+HLS is reverse-proxied through Caddy under `/live/*`. Playback requires a StreamForge-issued token with a 15-minute TTL. MediaMTX calls `POST /api/v1/live/auth` to authorize publishing and reading.
+
+### Session lifecycle and recording
+
+A successful publisher authentication opens a StreamForge live session and emits `live.started`. The worker polls the MediaMTX Control API and closes sessions that disappear, emitting `live.ended`. Recording is enabled in MediaMTX and stored in the isolated `live_recordings` volume as fragmented MP4 segments. MediaMTX supports automatic recording and its Control API exposes recordings by path.
+
+Live-to-VOD import into object storage remains separate work; recordings are not currently promoted into the normal VOD video pipeline automatically.

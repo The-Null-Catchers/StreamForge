@@ -356,4 +356,38 @@ export class StreamForge {
     }>(
       `/videos/${encodeURIComponent(id)}/analytics/breakdown?days=${encodeURIComponent(String(days))}`,
     );
+  live = {
+    list: (workspaceId: string) =>
+      this.request<any[]>(
+        `/live-streams?workspaceId=${encodeURIComponent(workspaceId)}`,
+      ),
+    create: (input: { workspaceId: string; name: string }) =>
+      this.request<{
+        id: string;
+        streamKey: string;
+        ingest: {
+          rtmpServer: string;
+          rtmpStreamKey: string;
+          srtUrl: string;
+        };
+      }>("/live-streams", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    get: (id: string) =>
+      this.request<any>(`/live-streams/${encodeURIComponent(id)}`),
+    rotateKey: (id: string) =>
+      this.request<any>(
+        `/live-streams/${encodeURIComponent(id)}/rotate-key`,
+        { method: "POST", body: JSON.stringify({}) },
+      ),
+    playback: (id: string) =>
+      this.request<{ token: string; expiresIn: number; hlsUrl: string }>(
+        `/live-streams/${encodeURIComponent(id)}/playback`,
+      ),
+    disable: (id: string) =>
+      this.request(`/live-streams/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      }),
+  };
 }

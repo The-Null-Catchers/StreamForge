@@ -1210,3 +1210,29 @@ code {
 .ai-result > div {
   margin-top: 12px;
 }
+
+.live-credentials {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fafb;
+}
+.live-credentials label {
+  display: grid;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.live-credentials code {
+  display: block;
+  padding: 9px 10px;
+  border-radius: 7px;
+  background: white;
+  border: 1px solid var(--line);
+  color: inherit;
+  overflow-wrap: anywhere;
+  user-select: all;
+}

@@ -11,5 +11,7 @@
   reverse_proxy @backend api:4000 {
     flush_interval -1
   }
+  @live path /live/*
+  reverse_proxy @live mediamtx:8888
   reverse_proxy web:3000
 }

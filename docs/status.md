@@ -17,7 +17,7 @@ This document distinguishes code that performs real work from design groundwork 
 | Notifications | Verification/reset email; in-app ready/failure messages                                                                      | Media-status email, quota notices, per-user read state, push                                            |
 | Observability | JSON logs, HTTP/process Prometheus metrics, dependency readiness and worker heartbeat                                        | Queue/storage/job counters, dashboards, internal admin console                                          |
 | Flutter       | Source login/workspaces/cache/resumable foreground upload/HLS/progress/basic analytics                                       | Platform generation and device verification, OS background transfers, subtitles, push, SSE              |
-| Advanced      | Chapters API/UI, ordered playlists, versions/review, subtitle-backed transcript indexing/search API/UI/SDK, queued chunked Whisper-compatible transcription, and transcript-grounded AI summary/metadata/chapter suggestions with explicit apply flow | Speaker diarization/translation and live ingest |
+| Advanced      | Chapters API/UI, ordered playlists, versions/review, transcript search, queued Whisper-compatible transcription, transcript-grounded AI helpers, and authenticated RTMP/SRT live ingest with HLS delivery, key rotation, session lifecycle, recording segments and live webhooks | Speaker diarization/translation, live-to-VOD import, multi-bitrate live transcoding, DVR and redundant ingest |
 
 ## Local verification
 
