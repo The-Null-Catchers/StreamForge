@@ -102,6 +102,7 @@ export default function Dashboard() {
   const [transcriptResults, setTranscriptResults] = useState<any[]>([]);
   const [transcriptions, setTranscriptions] = useState<any[]>([]);
   const [aiGenerations, setAiGenerations] = useState<any[]>([]);
+  const [operations, setOperations] = useState<any | null>(null);
   useEffect(() => {
     setAuthenticated(!!session());
     const q = new URLSearchParams(location.search);
@@ -269,6 +270,13 @@ export default function Dashboard() {
       void api(`/live-streams?workspaceId=${workspace}`)
         .then(setLiveStreams)
         .catch((e) => setNotice(e.message));
+    if (section === "operations")
+      void api(`/workspaces/${workspace}/operations`)
+        .then(setOperations)
+        .catch((e) => {
+          setOperations(null);
+          setNotice(e.message);
+        });
   }, [section, workspace]);
   async function savePlaylistItems(nextItems: any[]) {
     if (!playlistDetail) return;
@@ -506,6 +514,7 @@ export default function Dashboard() {
             { id: "activity", label: "Activity", icon: ChartNoAxesCombined },
             { id: "playlists", label: "Playlists", icon: FolderOpen },
             { id: "live", label: "Live streams", icon: Radio },
+            { id: "operations", label: "Operations", icon: RefreshCw },
             { id: "keys", label: "API keys", icon: KeyRound },
             { id: "webhooks", label: "Webhooks", icon: Webhook },
             { id: "settings", label: "Workspace", icon: Settings },
@@ -2372,6 +2381,194 @@ export default function Dashboard() {
                   <Radio size={36} />
                   <h2>No live streams yet</h2>
                   <p>Create a stream and connect OBS or FFmpeg.</p>
+                </div>
+              )}
+            </>
+          ) : section === "operations" ? (
+            <>
+              <div className="page-heading">
+                <div>
+                  <div className="eyebrow">INTERNAL OPERATIONS</div>
+                  <h1>Operations</h1>
+                  <p>
+                    Workspace-scoped health, queues, media processing and live
+                    delivery diagnostics.
+                  </p>
+                </div>
+                <button
+                  onClick={() =>
+                    void api(`/workspaces/${workspace}/operations`)
+                      .then(setOperations)
+                      .catch((e) => setNotice(e.message))
+                  }
+                >
+                  <RefreshCw size={14} /> Refresh
+                </button>
+              </div>
+              {operations ? (
+                <>
+                  <div className="stats">
+                    {[
+                      ["Database", operations.dependencies?.database ?? "unknown"],
+                      ["Redis", operations.dependencies?.redis ?? "unknown"],
+                      ["Storage", operations.dependencies?.storage ?? "unknown"],
+                      [
+                        "Workers",
+                        String(operations.dependencies?.workers ?? 0),
+                      ],
+                    ].map(([label, value]) => (
+                      <div key={label}>
+                        <span>{label}</span>
+                        <strong>{value}</strong>
+                      </div>
+                    ))}
+                  </div>
+
+                  <section className="panel">
+                    <h3>Queue health</h3>
+                    <div className="ops-grid">
+                      {operations.queues?.map((queue: any) => (
+                        <div className="ops-card" key={queue.name}>
+                          <strong>{queue.name}</strong>
+                          <span>
+                            {queue.active} active · {queue.waiting} waiting
+                          </span>
+                          <span>
+                            {queue.delayed} delayed · {queue.failed} failed
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  <div className="detail-grid">
+                    <section className="panel">
+                      <h3>Processing states</h3>
+                      {operations.processing?.length ? (
+                        operations.processing.map((row: any) => (
+                          <div className="resource-row" key={row.status}>
+                            <Film size={16} />
+                            <div>
+                              <strong>{row.status}</strong>
+                              <p>{row.count} jobs</p>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p>No processing jobs.</p>
+                      )}
+                    </section>
+                    <section className="panel">
+                      <h3>Live delivery</h3>
+                      {operations.live?.length ? (
+                        operations.live.map((row: any, index: number) => (
+                          <div
+                            className="resource-row"
+                            key={`${row.status}-${row.active_ingest}-${index}`}
+                          >
+                            <Radio size={16} />
+                            <div>
+                              <strong>{row.status}</strong>
+                              <p>
+                                {row.count} streams · ingest{" "}
+                                {row.active_ingest ?? "none"}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p>No live streams.</p>
+                      )}
+                    </section>
+                  </div>
+
+                  <section className="panel">
+                    <h3>Workspace media footprint</h3>
+                    <div className="stats">
+                      <div>
+                        <span>Source storage</span>
+                        <strong>
+                          {size(Number(operations.usage?.source_bytes ?? 0))}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Output storage</span>
+                        <strong>
+                          {size(Number(operations.usage?.output_bytes ?? 0))}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Videos</span>
+                        <strong>{operations.usage?.videos ?? 0}</strong>
+                      </div>
+                      <div>
+                        <span>Finalized live usage</span>
+                        <strong>
+                          {Math.ceil(
+                            Number(
+                              operations.usage?.finalized_live_seconds ?? 0,
+                            ) / 60,
+                          )}
+                          m
+                        </strong>
+                      </div>
+                    </div>
+                  </section>
+
+                  <div className="detail-grid">
+                    <section className="panel">
+                      <h3>Recent processing failures</h3>
+                      {operations.recentFailures?.processing?.length ? (
+                        operations.recentFailures.processing.map((row: any) => (
+                          <div className="resource-row" key={row.id}>
+                            <X size={16} />
+                            <div>
+                              <strong>{row.stage}</strong>
+                              <p>
+                                {row.error_code || "Unknown error"} · video{" "}
+                                {row.video_id}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p>No recent processing failures.</p>
+                      )}
+                    </section>
+                    <section className="panel">
+                      <h3>Recent webhook failures</h3>
+                      {operations.recentFailures?.webhooks?.length ? (
+                        operations.recentFailures.webhooks.map((row: any) => (
+                          <div className="resource-row" key={row.id}>
+                            <Webhook size={16} />
+                            <div>
+                              <strong>{row.event}</strong>
+                              <p>
+                                {row.last_error || "Delivery failed"} · attempt{" "}
+                                {row.attempts}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p>No recent webhook failures.</p>
+                      )}
+                    </section>
+                  </div>
+                  <p className="muted">
+                    Snapshot generated{" "}
+                    {new Date(operations.generatedAt).toLocaleString()}.
+                    Prometheus and Grafana remain internal monitoring services.
+                  </p>
+                </>
+              ) : (
+                <div className="empty">
+                  <RefreshCw size={36} />
+                  <h2>Operations data unavailable</h2>
+                  <p>
+                    Workspace admin access is required to view operational
+                    diagnostics.
+                  </p>
                 </div>
               )}
             </>
