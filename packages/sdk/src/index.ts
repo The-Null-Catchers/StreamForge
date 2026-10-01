@@ -257,7 +257,11 @@ export class StreamForge {
       this.request<Playlist[]>(
         `/playlists?workspaceId=${encodeURIComponent(workspaceId)}`,
       ),
-    create: (input: { workspaceId: string; name: string }) =>
+    create: (input: {
+      workspaceId: string;
+      name: string;
+      autoCreateVod?: boolean;
+    }) =>
       this.request<Playlist>("/playlists", {
         method: "POST",
         body: JSON.stringify(input),
@@ -376,6 +380,19 @@ export class StreamForge {
       }),
     get: (id: string) =>
       this.request<any>(`/live-streams/${encodeURIComponent(id)}`),
+    update: (
+      id: string,
+      input: { name?: string; autoCreateVod?: boolean },
+    ) =>
+      this.request(`/live-streams/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }),
+    retryPromotion: (id: string, sessionId: string) =>
+      this.request(
+        `/live-streams/${encodeURIComponent(id)}/sessions/${encodeURIComponent(sessionId)}/retry-promotion`,
+        { method: "POST", body: JSON.stringify({}) },
+      ),
     rotateKey: (id: string) =>
       this.request<any>(
         `/live-streams/${encodeURIComponent(id)}/rotate-key`,
