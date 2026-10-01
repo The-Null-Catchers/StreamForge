@@ -11,11 +11,12 @@
   reverse_proxy @backend api:4000 {
     flush_interval -1
   }
-  @live path /live/*
+  @live path_regexp live ^/live/([a-f0-9-]{36})/([^/]+)/(.*)$
   handle @live {
     forward_auth api:4000 {
       uri /api/v1/live/playback-auth
     }
+    rewrite * /live/{re.live.1}/{re.live.3}
     root * /srv/live_hls
     file_server
   }
