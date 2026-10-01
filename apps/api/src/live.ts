@@ -306,7 +306,10 @@ export async function liveRoutes(app: FastifyInstance) {
            WHERE id=$1`,
           [session.id],
         );
-        await enqueue(client, "live-import", { sessionId: session.id });
+        await enqueue(client, "live-import", {
+          sessionId: session.id,
+          force: true,
+        });
         return { ok: true, status: "queued" };
       });
     },
