@@ -36,7 +36,9 @@ export async function syncLiveStreams() {
       )
     ).rows;
     for (const stream of streams) {
-      const isActive = active.has(stream.path);
+      const isActive =
+        active.has(`${stream.path}/primary`) ||
+        active.has(`${stream.path}/backup`);
       if (isActive && stream.status !== "live") {
         await client.query(
           `UPDATE live_streams
