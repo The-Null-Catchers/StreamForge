@@ -151,6 +151,47 @@ test(
     });
     assert.equal(oldKeyAfterRotate.status, 403);
 
+    const liveToggle = await request(
+      `/api/v1/live-streams/${liveCreated.body.id}`,
+      "PATCH",
+      { autoCreateVod: false },
+    );
+    assert.equal(liveToggle.status, 200);
+    const liveListAfterToggle = await request(
+      `/api/v1/live-streams?workspaceId=${ws.id}`,
+    );
+    const toggled = liveListAfterToggle.body.find(
+      (stream: any) => stream.id === liveCreated.body.id,
+    );
+    assert.equal(toggled.auto_create_vod, false);
+
+    const retrySessionId = randomUUID();
+    await db.query(
+      `INSERT INTO live_sessions(
+         id,stream_id,started_at,ended_at,promotion_status,promotion_error
+       ) VALUES($1,$2,now()-interval '1 minute',now(),'failed','test')`,
+      [retrySessionId, liveCreated.body.id],
+    );
+    const retryPromotion = await request(
+      `/api/v1/live-streams/${liveCreated.body.id}/sessions/${retrySessionId}/retry-promotion`,
+      "POST",
+      {},
+    );
+    assert.equal(
+      retryPromotion.status,
+      200,
+      JSON.stringify(retryPromotion.body),
+    );
+    assert.equal(retryPromotion.body.status, "queued");
+    const retriedSession = (
+      await db.query(
+        "SELECT promotion_status,promotion_error FROM live_sessions WHERE id=$1",
+        [retrySessionId],
+      )
+    ).rows[0];
+    assert.equal(retriedSession.promotion_status, "queued");
+    assert.equal(retriedSession.promotion_error, null);
+
     const v = (
       await request("/api/v1/videos", "POST", {
         workspaceId: ws.id,
