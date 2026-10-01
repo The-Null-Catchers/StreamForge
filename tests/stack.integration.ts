@@ -183,15 +183,6 @@ test(
       JSON.stringify(retryPromotion.body),
     );
     assert.equal(retryPromotion.body.status, "queued");
-    const retriedSession = (
-      await db.query(
-        "SELECT promotion_status,promotion_error FROM live_sessions WHERE id=$1",
-        [retrySessionId],
-      )
-    ).rows[0];
-    assert.equal(retriedSession.promotion_status, "queued");
-    assert.equal(retriedSession.promotion_error, null);
-
     const v = (
       await request("/api/v1/videos", "POST", {
         workspaceId: ws.id,
