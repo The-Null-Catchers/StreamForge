@@ -1236,3 +1236,50 @@ code {
   overflow-wrap: anywhere;
   user-select: all;
 }
+
+.live-stream-card {
+  margin-bottom: 12px;
+}
+.live-stream-card > .resource-row {
+  margin-bottom: 0;
+}
+.live-sessions {
+  display: grid;
+  gap: 8px;
+  padding: 10px 14px 14px 52px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 9px 9px;
+  background: #f8fafb;
+}
+.live-sessions > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+.live-sessions > div:last-child {
+  border-bottom: 0;
+}
+.live-sessions > div > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.live-sessions span,
+.live-sessions small {
+  font-size: 10px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 720px) {
+  .live-sessions {
+    padding-left: 14px;
+  }
+  .live-sessions > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

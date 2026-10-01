@@ -1,5 +1,5 @@
 import { transaction } from "../../../packages/shared/src/db.js";
-import { event } from "../../../packages/shared/src/events.js";
+import { enqueue, event } from "../../../packages/shared/src/events.js";
 import { config } from "../../../packages/config/src/index.js";
 
 type MediaMtxPath = {
@@ -29,7 +29,7 @@ export async function syncLiveStreams() {
   await transaction(async (client) => {
     const streams = (
       await client.query(
-        `SELECT id,workspace_id,path,status
+        `SELECT id,workspace_id,path,status,auto_create_vod
          FROM live_streams
          WHERE status<>'disabled'
          FOR UPDATE`,
@@ -62,12 +62,17 @@ export async function syncLiveStreams() {
            WHERE id=$1`,
           [stream.id],
         );
-        await client.query(
+        const ended = await client.query(
           `UPDATE live_sessions
-           SET ended_at=now()
-           WHERE stream_id=$1 AND ended_at IS NULL`,
-          [stream.id],
+           SET ended_at=now(),
+               promotion_status=$2
+           WHERE stream_id=$1 AND ended_at IS NULL
+           RETURNING id`,
+          [stream.id, stream.auto_create_vod ? "queued" : "skipped"],
         );
+        if (stream.auto_create_vod)
+          for (const session of ended.rows)
+            await enqueue(client, "live-import", { sessionId: session.id });
         await event(client, stream.workspace_id, stream.id, "live.ended", "streamId");
       }
     }
