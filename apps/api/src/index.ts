@@ -2,7 +2,12 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import { ZodError } from "zod";
-import { Registry, collectDefaultMetrics, Histogram } from "prom-client";
+import {
+  Registry,
+  collectDefaultMetrics,
+  Histogram,
+  Gauge,
+} from "prom-client";
 import { db } from "../../../packages/shared/src/db.js";
 import { redis, queues } from "../../../packages/shared/src/queues.js";
 import { storage } from "../../../packages/shared/src/storage.js";
@@ -44,6 +49,121 @@ const latency = new Histogram({
   labelNames: ["route", "method", "status"],
   registers: [registry],
 });
+const queueJobs = new Gauge({
+  name: "streamforge_queue_jobs",
+  help: "BullMQ jobs by queue and state",
+  labelNames: ["queue", "state"],
+  registers: [registry],
+});
+const processingJobs = new Gauge({
+  name: "streamforge_processing_jobs",
+  help: "Persisted processing jobs by status",
+  labelNames: ["status"],
+  registers: [registry],
+});
+const liveStreams = new Gauge({
+  name: "streamforge_live_streams",
+  help: "Live stream resources by status",
+  labelNames: ["status"],
+  registers: [registry],
+});
+const liveIngest = new Gauge({
+  name: "streamforge_live_active_ingest",
+  help: "Live streams by currently selected ingest",
+  labelNames: ["ingest"],
+  registers: [registry],
+});
+const sourceBytes = new Gauge({
+  name: "streamforge_source_storage_bytes",
+  help: "Total non-deleted source bytes reserved across workspaces",
+  registers: [registry],
+});
+const outputBytes = new Gauge({
+  name: "streamforge_output_storage_bytes",
+  help: "Total output bytes recorded in the usage ledger",
+  registers: [registry],
+});
+const workerHeartbeats = new Gauge({
+  name: "streamforge_worker_heartbeats",
+  help: "Workers with a heartbeat in the last 30 seconds",
+  registers: [registry],
+});
+const metricsRefresh = new Gauge({
+  name: "streamforge_metrics_refresh_success",
+  help: "Whether the latest operational metrics refresh succeeded",
+  registers: [registry],
+});
+
+async function refreshOperationalMetrics() {
+  try {
+    queueJobs.reset();
+    await Promise.all(
+      Object.entries(queues).map(async ([name, queue]) => {
+        const counts = await queue.getJobCounts(
+          "waiting",
+          "active",
+          "delayed",
+          "failed",
+          "completed",
+        );
+        for (const state of [
+          "waiting",
+          "active",
+          "delayed",
+          "failed",
+          "completed",
+        ] as const)
+          queueJobs.set(
+            { queue: name, state },
+            Number(counts[state] ?? 0),
+          );
+      }),
+    );
+
+    const [processing, live, ingest, storageRows, outputRows, workers] =
+      await Promise.all([
+        db.query(
+          "SELECT status,count(*)::int AS count FROM processing_jobs GROUP BY status",
+        ),
+        db.query(
+          "SELECT status,count(*)::int AS count FROM live_streams GROUP BY status",
+        ),
+        db.query(
+          "SELECT coalesce(active_ingest,'none') AS ingest,count(*)::int AS count FROM live_streams GROUP BY coalesce(active_ingest,'none')",
+        ),
+        db.query(
+          "SELECT coalesce(sum(size),0)::bigint AS bytes FROM videos WHERE deleted_at IS NULL",
+        ),
+        db.query(
+          "SELECT coalesce(sum(amount),0)::bigint AS bytes FROM usage_records WHERE kind='output_bytes'",
+        ),
+        redis.zrangebyscore(
+          "streamforge:workers",
+          Date.now() - 30000,
+          "+inf",
+        ),
+      ]);
+
+    processingJobs.reset();
+    for (const row of processing.rows)
+      processingJobs.set({ status: String(row.status) }, Number(row.count));
+
+    liveStreams.reset();
+    for (const row of live.rows)
+      liveStreams.set({ status: String(row.status) }, Number(row.count));
+
+    liveIngest.reset();
+    for (const row of ingest.rows)
+      liveIngest.set({ ingest: String(row.ingest) }, Number(row.count));
+
+    sourceBytes.set(Number(storageRows.rows[0]?.bytes ?? 0));
+    outputBytes.set(Number(outputRows.rows[0]?.bytes ?? 0));
+    workerHeartbeats.set(workers.length);
+    metricsRefresh.set(1);
+  } catch {
+    metricsRefresh.set(0);
+  }
+}
 await app.register(cors, {
   origin: config.WEB_ORIGIN,
   allowedHeaders: ["Content-Type", "Authorization", "X-Checksum-Sha256"],
@@ -109,9 +229,10 @@ app.get("/health/ready", async (_req, reply) => {
 });
 // Metrics are bound to an internal listener and are never proxied by Caddy.
 const metrics = Fastify();
-metrics.get("/metrics", async (_r, reply) =>
-  reply.type(registry.contentType).send(await registry.metrics()),
-);
+metrics.get("/metrics", async (_r, reply) => {
+  await refreshOperationalMetrics();
+  return reply.type(registry.contentType).send(await registry.metrics());
+});
 await metrics.listen({ port: 9091, host: "0.0.0.0" });
 await authRoutes(app);
 await workspaceRoutes(app);
