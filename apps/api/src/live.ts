@@ -137,6 +137,7 @@ export async function liveRoutes(app: FastifyInstance) {
       .object({
         workspaceId: uuid,
         name: z.string().trim().min(1).max(200),
+        autoCreateVod: z.boolean().default(true),
       })
       .parse(req.body);
     const a = await access(req, body.workspaceId, "editor", "videos:write");
@@ -146,9 +147,9 @@ export async function liveRoutes(app: FastifyInstance) {
     const row = (
       await db.query(
         `INSERT INTO live_streams(
-           id,workspace_id,name,path,stream_key_hash,recording_enabled,created_by
-         ) VALUES($1,$2,$3,$4,$5,$6,$7)
-         RETURNING id,workspace_id,name,path,recording_enabled,status,created_at`,
+           id,workspace_id,name,path,stream_key_hash,recording_enabled,auto_create_vod,created_by
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+         RETURNING id,workspace_id,name,path,recording_enabled,auto_create_vod,status,created_at`,
         [
           id,
           body.workspaceId,
@@ -156,6 +157,7 @@ export async function liveRoutes(app: FastifyInstance) {
           path,
           hash(key),
           true,
+          body.autoCreateVod,
           a.userId ?? null,
         ],
       )
@@ -181,7 +183,7 @@ export async function liveRoutes(app: FastifyInstance) {
     return (
       await db.query(
         `SELECT
-           id,workspace_id,name,path,recording_enabled,status,
+           id,workspace_id,name,path,recording_enabled,auto_create_vod,status,
            last_started_at,last_ended_at,created_at,updated_at
          FROM live_streams
          WHERE workspace_id=$1
@@ -205,7 +207,9 @@ export async function liveRoutes(app: FastifyInstance) {
       await access(req, stream.workspace_id);
       const sessions = (
         await db.query(
-          `SELECT id,protocol,publisher_id,started_at,ended_at,bytes_received
+          `SELECT
+             id,protocol,publisher_id,started_at,ended_at,bytes_received,
+             promotion_status,recording_video_id,promotion_error,promoted_at
            FROM live_sessions
            WHERE stream_id=$1
            ORDER BY started_at DESC
@@ -219,12 +223,92 @@ export async function liveRoutes(app: FastifyInstance) {
         name: stream.name,
         path: stream.path,
         recording_enabled: stream.recording_enabled,
+        auto_create_vod: stream.auto_create_vod,
         status: stream.status,
         last_started_at: stream.last_started_at,
         last_ended_at: stream.last_ended_at,
         created_at: stream.created_at,
         sessions,
       };
+    },
+  );
+
+  app.patch<{ Params: { id: string } }>(
+    "/api/v1/live-streams/:id",
+    async (req) => {
+      uuid.parse(req.params.id);
+      const stream = (
+        await db.query("SELECT * FROM live_streams WHERE id=$1", [req.params.id])
+      ).rows[0];
+      if (!stream) throw new ApiError(404, "LIVE_STREAM_NOT_FOUND");
+      const a = await access(
+        req,
+        stream.workspace_id,
+        "editor",
+        "videos:write",
+      );
+      const body = z
+        .object({
+          name: z.string().trim().min(1).max(200).optional(),
+          autoCreateVod: z.boolean().optional(),
+        })
+        .refine(
+          (value) =>
+            value.name !== undefined || value.autoCreateVod !== undefined,
+          "NO_CHANGES",
+        )
+        .parse(req.body ?? {});
+      await db.query(
+        `UPDATE live_streams
+         SET name=coalesce($1,name),
+             auto_create_vod=coalesce($2,auto_create_vod),
+             updated_at=now()
+         WHERE id=$3`,
+        [body.name ?? null, body.autoCreateVod ?? null, stream.id],
+      );
+      await audit(stream.workspace_id, a, "live-stream.updated", stream.id);
+      return { ok: true };
+    },
+  );
+
+  app.post<{ Params: { id: string; sessionId: string } }>(
+    "/api/v1/live-streams/:id/sessions/:sessionId/retry-promotion",
+    async (req) => {
+      uuid.parse(req.params.id);
+      uuid.parse(req.params.sessionId);
+      const stream = (
+        await db.query("SELECT * FROM live_streams WHERE id=$1", [req.params.id])
+      ).rows[0];
+      if (!stream) throw new ApiError(404, "LIVE_STREAM_NOT_FOUND");
+      await access(req, stream.workspace_id, "editor", "videos:write");
+      return transaction(async (client) => {
+        const session = (
+          await client.query(
+            `SELECT *
+             FROM live_sessions
+             WHERE id=$1 AND stream_id=$2
+             FOR UPDATE`,
+            [req.params.sessionId, stream.id],
+          )
+        ).rows[0];
+        if (!session) throw new ApiError(404, "LIVE_SESSION_NOT_FOUND");
+        if (!session.ended_at)
+          throw new ApiError(409, "LIVE_SESSION_NOT_ENDED");
+        if (session.promotion_status === "complete")
+          return {
+            ok: true,
+            videoId: session.recording_video_id,
+            status: "complete",
+          };
+        await client.query(
+          `UPDATE live_sessions
+           SET promotion_status='queued',promotion_error=NULL
+           WHERE id=$1`,
+          [session.id],
+        );
+        await enqueue(client, "live-import", { sessionId: session.id });
+        return { ok: true, status: "queued" };
+      });
     },
   );
 
