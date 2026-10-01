@@ -18,10 +18,12 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm run openapi:validate
       - run: npm test
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: npm run test:media
       - run: npm run build
+      - run: npm run sdk:pack
   stack:
     runs-on: ubuntu-latest
     timeout-minutes: 25

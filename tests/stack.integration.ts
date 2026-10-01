@@ -59,6 +59,14 @@ test(
     });
     assert.equal(login.status, 200);
     token = login.body.accessToken;
+    const openApiResponse = await fetch(base + "/api/openapi.json");
+    assert.equal(openApiResponse.status, 200);
+    const openApi = await openApiResponse.json();
+    assert.equal(openApi.openapi, "3.1.0");
+    assert.equal(openApi.info.version, "0.1.0");
+    assert.ok(openApi.paths["/api/v1/videos"]);
+    assert.ok(openApi.paths["/api/v1/live-streams"]);
+    assert.ok(openApi.components.securitySchemes.bearerAuth);
     const ws = (
       await request("/api/v1/workspaces", "POST", {
         name: "Integration workspace",

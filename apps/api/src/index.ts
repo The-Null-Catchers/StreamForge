@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import { readFileSync } from "node:fs";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import { ZodError } from "zod";
@@ -26,6 +27,10 @@ import { aiRoutes } from "./ai.js";
 import { liveRoutes } from "./live.js";
 import { operationsRoutes } from "./operations.js";
 import { access } from "./context.js";
+const openApiDocument = JSON.parse(
+  readFileSync(new URL("../../../docs/openapi.json", import.meta.url), "utf8"),
+);
+
 export const app = Fastify({
   trustProxy: (_address, hop) => hop < 1,
   logger: {
@@ -209,6 +214,12 @@ app.setErrorHandler((error, req, reply) => {
   });
 });
 app.get("/health", async () => ({ status: "ok", service: "streamforge-api" }));
+app.get("/api/openapi.json", async (_req, reply) =>
+  reply
+    .header("Cache-Control", "public, max-age=300")
+    .type("application/json")
+    .send(openApiDocument),
+);
 app.get("/health/ready", async (_req, reply) => {
   try {
     await Promise.all([

@@ -1,8 +1,30 @@
 {
   "name": "@streamforge/sdk",
   "version": "0.1.0",
+  "description": "TypeScript SDK for the StreamForge video and live streaming API",
   "type": "module",
-  "main": "../../dist/packages/sdk/src/index.js",
-  "types": "../../dist/packages/sdk/src/index.d.ts",
-  "private": true
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "prepack": "npm run build"
+  }
 }

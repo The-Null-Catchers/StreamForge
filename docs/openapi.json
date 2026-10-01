@@ -1,0 +1,1134 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "StreamForge API",
+    "version": "0.1.0",
+    "description": "Developer API for video uploads, processing, playback, analytics, live streaming, transcripts, AI helpers and platform integrations."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local Docker stack"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Videos"
+    },
+    {
+      "name": "Uploads"
+    },
+    {
+      "name": "Playback"
+    },
+    {
+      "name": "Analytics"
+    },
+    {
+      "name": "Transcripts"
+    },
+    {
+      "name": "AI"
+    },
+    {
+      "name": "Playlists"
+    },
+    {
+      "name": "Live"
+    },
+    {
+      "name": "Developer"
+    },
+    {
+      "name": "Workspaces"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/v1/videos": {
+      "get": {
+        "tags": [
+          "Videos"
+        ],
+        "operationId": "listVideos",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Videos"
+        ],
+        "operationId": "createVideo",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CreateVideo"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "201": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}": {
+      "get": {
+        "tags": [
+          "Videos"
+        ],
+        "operationId": "getVideo",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Videos"
+        ],
+        "operationId": "deleteVideo",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/uploads": {
+      "post": {
+        "tags": [
+          "Uploads"
+        ],
+        "operationId": "createUpload",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUpload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "201": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{id}": {
+      "get": {
+        "tags": [
+          "Uploads"
+        ],
+        "operationId": "getUpload",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Uploads"
+        ],
+        "operationId": "cancelUpload",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{id}/parts/{part}": {
+      "put": {
+        "tags": [
+          "Uploads"
+        ],
+        "operationId": "uploadPart",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          },
+          {
+            "name": "part",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "X-Checksum-Sha256",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "contentEncoding": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/{id}/complete": {
+      "post": {
+        "tags": [
+          "Uploads"
+        ],
+        "operationId": "completeUpload",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/playback": {
+      "get": {
+        "tags": [
+          "Playback"
+        ],
+        "operationId": "getPlayback",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/chapters": {
+      "get": {
+        "tags": [
+          "Videos"
+        ],
+        "operationId": "listChapters",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Videos"
+        ],
+        "operationId": "replaceChapters",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "chapters"
+                ],
+                "properties": {
+                  "chapters": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/ChapterInput"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/analytics": {
+      "get": {
+        "tags": [
+          "Analytics"
+        ],
+        "operationId": "getVideoAnalytics",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/analytics/realtime": {
+      "get": {
+        "tags": [
+          "Analytics"
+        ],
+        "operationId": "getRealtimeAnalytics",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/analytics/daily": {
+      "get": {
+        "tags": [
+          "Analytics"
+        ],
+        "operationId": "getDailyAnalytics",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 90,
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/analytics/breakdown": {
+      "get": {
+        "tags": [
+          "Analytics"
+        ],
+        "operationId": "getAnalyticsBreakdown",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 90,
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/transcript": {
+      "get": {
+        "tags": [
+          "Transcripts"
+        ],
+        "operationId": "getVideoTranscript",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/transcripts/search": {
+      "get": {
+        "tags": [
+          "Transcripts"
+        ],
+        "operationId": "searchTranscripts",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/transcriptions": {
+      "get": {
+        "tags": [
+          "Transcripts"
+        ],
+        "operationId": "listTranscriptions",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Transcripts"
+        ],
+        "operationId": "createTranscription",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "language": {
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "ar",
+                      "en"
+                    ],
+                    "default": "auto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/ai-generations": {
+      "get": {
+        "tags": [
+          "AI"
+        ],
+        "operationId": "listAiGenerations",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "AI"
+        ],
+        "operationId": "createAiGeneration",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "summary",
+                      "metadata",
+                      "chapters",
+                      "all"
+                    ]
+                  },
+                  "language": {
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "ar",
+                      "en"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/playlists": {
+      "get": {
+        "tags": [
+          "Playlists"
+        ],
+        "operationId": "listPlaylists",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Playlists"
+        ],
+        "operationId": "createPlaylist",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "workspaceId",
+                  "name"
+                ],
+                "properties": {
+                  "workspaceId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/playlists/{id}": {
+      "get": {
+        "tags": [
+          "Playlists"
+        ],
+        "operationId": "getPlaylist",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Playlists"
+        ],
+        "operationId": "updatePlaylist",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Playlists"
+        ],
+        "operationId": "deletePlaylist",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/live-streams": {
+      "get": {
+        "tags": [
+          "Live"
+        ],
+        "operationId": "listLiveStreams",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Live"
+        ],
+        "operationId": "createLiveStream",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLiveStream"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/live-streams/{id}": {
+      "get": {
+        "tags": [
+          "Live"
+        ],
+        "operationId": "getLiveStream",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Live"
+        ],
+        "operationId": "updateLiveStream",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Live"
+        ],
+        "operationId": "disableLiveStream",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/live-streams/{id}/rotate-key": {
+      "post": {
+        "tags": [
+          "Live"
+        ],
+        "operationId": "rotateLiveStreamKey",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/live-streams/{id}/playback": {
+      "get": {
+        "tags": [
+          "Live"
+        ],
+        "operationId": "getLivePlayback",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/api-keys": {
+      "get": {
+        "tags": [
+          "Developer"
+        ],
+        "operationId": "listApiKeys",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Developer"
+        ],
+        "operationId": "createApiKey",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks": {
+      "get": {
+        "tags": [
+          "Developer"
+        ],
+        "operationId": "listWebhooks",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Developer"
+        ],
+        "operationId": "createWebhook",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{id}/usage": {
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "getWorkspaceUsage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{id}/operations": {
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "getWorkspaceOperations",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT or StreamForge API key"
+      }
+    },
+    "parameters": {
+      "Id": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    "requestBodies": {
+      "CreateVideo": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CreateVideo"
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Ok": {
+        "description": "Successful response",
+        "content": {
+          "application/json": {
+            "schema": {}
+          }
+        }
+      },
+      "Error": {
+        "description": "StreamForge API error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "requestId": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "CreateVideo": {
+        "type": "object",
+        "required": [
+          "workspaceId",
+          "title"
+        ],
+        "properties": {
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "privacy": {
+            "type": "string",
+            "enum": [
+              "private",
+              "unlisted",
+              "public"
+            ]
+          }
+        }
+      },
+      "CreateUpload": {
+        "type": "object",
+        "required": [
+          "workspaceId",
+          "videoId",
+          "filename",
+          "mimeType",
+          "totalSize",
+          "checksum"
+        ],
+        "properties": {
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "videoId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "totalSize": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "checksum": {
+            "type": "string"
+          }
+        }
+      },
+      "ChapterInput": {
+        "type": "object",
+        "required": [
+          "startSeconds",
+          "title"
+        ],
+        "properties": {
+          "startSeconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateLiveStream": {
+        "type": "object",
+        "required": [
+          "workspaceId",
+          "name"
+        ],
+        "properties": {
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "autoCreateVod": {
+            "type": "boolean",
+            "default": true
+          },
+          "dvrWindowSeconds": {
+            "type": "integer",
+            "minimum": 30,
+            "maximum": 21600,
+            "default": 600
+          },
+          "liveProfile": {
+            "type": "string",
+            "enum": [
+              "source",
+              "standard",
+              "high"
+            ],
+            "default": "standard"
+          }
+        }
+      }
+    }
+  }
+}
