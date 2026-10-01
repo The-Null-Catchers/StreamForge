@@ -144,11 +144,10 @@ export async function liveRoutes(app: FastifyInstance) {
 
   app.get("/api/v1/live/playback-auth", async (req, reply) => {
     const forwarded = String(req.headers["x-forwarded-uri"] ?? "");
-    const match = /^\/live\/([a-f0-9-]{36})\/.+/.exec(forwarded);
+    const match = /^\/live\/([a-f0-9-]{36})\/([^/]+)\/.+/.exec(forwarded);
     if (!match) return reply.code(403).send();
-    const url = new URL(forwarded, "http://streamforge.local");
-    const token = url.searchParams.get("token");
-    if (!token) return reply.code(401).send();
+    const token = match[2]!;
+
     try {
       const claims = await liveClaims(token);
       if (claims.kind !== "live" || claims.streamId !== match[1])
@@ -449,7 +448,7 @@ export async function liveRoutes(app: FastifyInstance) {
         token,
         expiresIn: 900,
         hlsUrl:
-          `${config.LIVE_PUBLIC_HLS_URL}/${stream.id}/master.m3u8?token=${encodeURIComponent(token)}`,
+          `${config.LIVE_PUBLIC_HLS_URL}/${stream.id}/${encodeURIComponent(token)}/master.m3u8`,
       };
     },
   );
