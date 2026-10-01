@@ -43,7 +43,10 @@ function quoteConcatPath(path: string) {
 }
 
 export async function liveImportJob(job: Job) {
-  const { sessionId } = job.data as { sessionId: string };
+  const { sessionId, force = false } = job.data as {
+    sessionId: string;
+    force?: boolean;
+  };
   const session = (
     await db.query(
       `SELECT
@@ -55,7 +58,7 @@ export async function liveImportJob(job: Job) {
     )
   ).rows[0];
   if (!session || session.promotion_status === "complete") return;
-  if (!session.ended_at || !session.auto_create_vod) {
+  if (!session.ended_at || (!session.auto_create_vod && !force)) {
     await db.query(
       `UPDATE live_sessions
        SET promotion_status='skipped',promotion_error=NULL
