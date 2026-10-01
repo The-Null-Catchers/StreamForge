@@ -52,4 +52,4 @@ The page uses:
 
 `GET /api/v1/workspaces/:id/operations`
 
-It provides a workspace-scoped operational snapshot without exposing the internal Prometheus or Grafana interfaces publicly.
+It provides a workspace-scoped operational snapshot without exposing the internal Prometheus or Grafana interfaces publicly. Global queue metrics remain available only through the internal Grafana/Prometheus stack.
