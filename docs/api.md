@@ -363,3 +363,28 @@ Failover lifecycle webhooks:
 - `live.primary.restored` — primary returned and became active again.
 
 The final program feed is also segmented into hourly MP4 recordings. Live-to-VOD promotion imports this program recording, so concurrently connected redundant ingest feeds never produce duplicate VOD content.
+
+
+### Live usage and quotas
+
+Each workspace has two live-stream limits:
+
+- `live_concurrency_limit` — maximum number of logical live streams that can be active at once.
+- `live_minutes_monthly_limit` — maximum live minutes consumed in the current calendar month. A value of `0` disables the monthly-minute cap.
+
+Publish authentication checks both limits transactionally before opening a new live session. Primary and backup publishers for the same logical stream do not consume two concurrency slots.
+
+When a live session ends, StreamForge writes one idempotent `usage_records` entry with kind `live_seconds`. The idempotency key is derived from the live-session ID, so reconciliation or repeated end processing cannot double bill a session.
+
+Workspace usage:
+
+`GET /api/v1/workspaces/:id/usage`
+
+The response now includes:
+
+- `active_live_streams`
+- `live_concurrency_limit`
+- `live_seconds_this_month`
+- `live_minutes_monthly_limit`
+
+Monthly usage includes both finalized session records and elapsed time from currently active sessions, so the publish gate cannot be bypassed by keeping long sessions open until month-end accounting.
