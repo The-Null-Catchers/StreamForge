@@ -112,12 +112,12 @@ async function startTranscoder(stream: {
   path: string;
   live_profile: string;
   dvr_window_seconds: number;
-}, source: string) {
+}, source: string, preserveDvr = false) {
   const metadata = await probeSource(source);
   const variants = ladder(stream.live_profile, metadata.height);
   const root = join(config.LIVE_HLS_ROOT, "live", stream.id);
   const recordRoot = join("/recordings", stream.path, "program");
-  await rm(root, { recursive: true, force: true });
+  if (!preserveDvr) await rm(root, { recursive: true, force: true });
   await mkdir(root, { recursive: true });
   await mkdir(recordRoot, { recursive: true });
   for (const variant of variants)
@@ -257,7 +257,7 @@ async function startTranscoder(stream: {
     "1",
     "-strftime",
     "1",
-    join(recordRoot, "%Y-%m-%d_%H-%M-%S.mp4"),
+    join(recordRoot, "%Y-%m-%d_%H-%M-%S-%s.mp4"),
   );
 
   const child = spawn("ffmpeg", args, {
@@ -354,9 +354,10 @@ async function reconcile() {
       continue;
     }
     if (current?.source === selected.path) continue;
+    const preserveDvr = Boolean(current);
     if (current) current.child.kill("SIGTERM");
     try {
-      await startTranscoder(stream, selected.path);
+      await startTranscoder(stream, selected.path, preserveDvr);
     } catch (error) {
       logger.error(
         { streamId: stream.id, source: selected.path, err: error },
