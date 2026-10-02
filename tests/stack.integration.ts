@@ -570,6 +570,21 @@ test(
       );
       assert.equal(subtitleUpload.status, 200, JSON.stringify(subtitleUpload.body));
       assert.equal(subtitleUpload.body.transcriptSegments, 2);
+      const renewedPlayback = await request(
+        `/api/v1/videos/${v.id}/playback/refresh`,
+        "POST",
+        { token: playback.token },
+      );
+      assert.equal(
+        renewedPlayback.status,
+        200,
+        JSON.stringify(renewedPlayback.body),
+      );
+      assert.equal(renewedPlayback.body.sessionId, playback.sessionId);
+      assert.notEqual(renewedPlayback.body.token, playback.token);
+      assert.equal(renewedPlayback.body.subtitles.length, 1);
+      assert.equal(renewedPlayback.body.subtitles[0].language, "ar");
+      assert.match(renewedPlayback.body.subtitles[0].url, /token=/);
       const transcriptSearch = await request(
         `/api/v1/videos/${v.id}/transcript?search=${encodeURIComponent("البحث")}`,
       );
