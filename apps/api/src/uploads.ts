@@ -129,6 +129,26 @@ export async function uploadRoutes(app: FastifyInstance) {
           throw new ApiError(400, "INVALID_PART");
         }
         if (body.length !== size) throw new ApiError(422, "INVALID_PART_SIZE");
+        const workspace = (
+          await c.query(
+            "SELECT upload_bytes_monthly_limit FROM workspaces WHERE id=$1 FOR UPDATE",
+            [u.workspace_id],
+          )
+        ).rows[0];
+        const monthly = (
+          await c.query(
+            `SELECT coalesce(sum(uploaded_bytes),0) AS bytes
+             FROM uploads
+             WHERE workspace_id=$1
+               AND created_at>=date_trunc('month',now())`,
+            [u.workspace_id],
+          )
+        ).rows[0];
+        if (
+          Number(monthly.bytes) + size >
+          Number(workspace.upload_bytes_monthly_limit)
+        )
+          throw new ApiError(409, "MONTHLY_UPLOAD_QUOTA_EXCEEDED");
         const existing = await c.query(
           "SELECT checksum FROM upload_parts WHERE upload_id=$1 AND part_number=$2",
           [u.id, part],
