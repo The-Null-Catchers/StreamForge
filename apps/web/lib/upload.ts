@@ -1,5 +1,14 @@
 import { createSHA256 } from "hash-wasm";
 import { api, post } from "./api";
+
+export type UploadSessionInfo = {
+  id: string;
+  resumed: boolean;
+  uploadedBytes: number;
+  totalSize: number;
+  chunkSize: number;
+};
+
 export async function fileHash(file: File, onProgress?: (pct: number) => void) {
   const h = await createSHA256();
   h.init();
@@ -11,25 +20,32 @@ export async function fileHash(file: File, onProgress?: (pct: number) => void) {
   }
   return h.digest("hex");
 }
+
 export async function upload(
   file: File,
   workspaceId: string,
   signal: AbortSignal,
   onProgress: (bytes: number, speed: number) => void,
   onHash: (pct: number) => void,
+  onSession?: (session: UploadSessionInfo) => void,
 ) {
   const checksum = await fileHash(file, onHash);
   if (signal.aborted) return;
   const key = `sf_upload_${workspaceId}_${checksum}`;
   let id = localStorage.getItem(key);
   let state;
+  let resumed = false;
+
   if (id) {
     state = await api(`/uploads/${id}`);
     if (state.status !== "uploading") {
       localStorage.removeItem(key);
       id = null;
+    } else {
+      resumed = true;
     }
   }
+
   if (!id) {
     const v = await post("/videos", {
       workspaceId,
@@ -47,13 +63,25 @@ export async function upload(
     id = state.id;
     localStorage.setItem(key, id!);
   }
+
   const confirmed = await api(`/uploads/${id}`);
+  onSession?.({
+    id: id!,
+    resumed,
+    uploadedBytes: Number(confirmed.uploaded_bytes),
+    totalSize: Number(confirmed.total_size),
+    chunkSize: Number(confirmed.chunk_size),
+  });
+
   const parts = new Set<number>(
     confirmed.parts.map((p: { part_number: number }) => p.part_number),
   );
   let completed = Number(confirmed.uploaded_bytes);
   const start = performance.now();
   const initial = completed;
+
+  if (completed > 0) onProgress(completed, 0);
+
   for (let n = 0; n < Math.ceil(file.size / confirmed.chunk_size); n++) {
     if (signal.aborted) return;
     if (parts.has(n)) continue;
@@ -93,6 +121,7 @@ export async function upload(
       );
     }
   }
+
   if (!signal.aborted) {
     await post(`/uploads/${id}/complete`, {});
     localStorage.removeItem(key);
