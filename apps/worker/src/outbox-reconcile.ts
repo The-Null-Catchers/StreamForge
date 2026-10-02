@@ -12,8 +12,12 @@ type Queryable = {
   query<T = any>(text: string, values?: unknown[]): Promise<QueryResult<T>>;
 };
 
+type QueueJob = {
+  getState?: () => Promise<string>;
+};
+
 type QueueLookup = {
-  getJob(id: string): Promise<unknown | null>;
+  getJob(id: string): Promise<QueueJob | null>;
 };
 
 export async function reconcileDispatchedOutbox(
@@ -38,7 +42,16 @@ export async function reconcileDispatchedOutbox(
     if (!queue) continue;
 
     const job = await queue.getJob(row.id);
-    if (job) continue;
+    if (job) {
+      const state = job.getState ? await job.getState() : "";
+      if (state === "completed" || state === "failed") {
+        await database.query(
+          "UPDATE outbox SET acknowledged_at=coalesce(acknowledged_at,now()) WHERE id=$1",
+          [row.id],
+        );
+      }
+      continue;
+    }
 
     const reset = await database.query(
       `UPDATE outbox
