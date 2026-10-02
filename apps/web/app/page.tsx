@@ -107,6 +107,17 @@ export default function Dashboard() {
   useEffect(() => {
     setAuthenticated(!!session());
     const q = new URLSearchParams(location.search);
+    if (q.has("invite")) {
+      const invite = q.get("invite");
+      if (invite) sessionStorage.setItem("sf_pending_invite", invite);
+      q.delete("invite");
+      const query = q.toString();
+      history.replaceState(
+        {},
+        "",
+        `${location.pathname}${query ? `?${query}` : ""}`,
+      );
+    }
     if (q.has("verify")) {
       void post("/auth/verify", { token: q.get("verify") })
         .then(() => setNotice("Email verified. You can sign in."))
@@ -126,6 +137,19 @@ export default function Dashboard() {
   }, []);
   useEffect(() => {
     if (authenticated) void loadWorkspaces();
+  }, [authenticated, loadWorkspaces]);
+  useEffect(() => {
+    if (!authenticated) return;
+    const token = sessionStorage.getItem("sf_pending_invite");
+    if (!token) return;
+    void post("/invites/accept", { token })
+      .then(async (result) => {
+        sessionStorage.removeItem("sf_pending_invite");
+        await loadWorkspaces();
+        setWorkspace(result.workspaceId);
+        setNotice("Workspace invitation accepted.");
+      })
+      .catch((e) => setNotice(e.message));
   }, [authenticated, loadWorkspaces]);
   const load = useCallback(async () => {
     if (!workspace) return;
@@ -2651,13 +2675,14 @@ export default function Dashboard() {
                     e.preventDefault();
                     const f = new FormData(e.currentTarget);
                     try {
-                      const r = await post(`/workspaces/${workspace}/invites`, {
+                      await post(`/workspaces/${workspace}/invites`, {
                         email: f.get("email"),
                         role: f.get("role"),
                       });
                       setNotice(
-                        `Invite token (valid 7 days). Share privately with your teammate: ${r.token}`,
+                        "Invitation email sent. The link is valid for 7 days.",
                       );
+                      e.currentTarget.reset();
                     } catch (err) {
                       setNotice((err as Error).message);
                     }
