@@ -71,6 +71,8 @@ export default function Dashboard() {
   const [usage, setUsage] = useState({
     source_bytes: 0,
     storage_limit: 1,
+    upload_bytes_this_month: 0,
+    upload_bytes_monthly_limit: 1,
     videos: 0,
     active_live_streams: 0,
     live_concurrency_limit: 0,
@@ -617,6 +619,19 @@ export default function Dashboard() {
               max={Number(usage.storage_limit)}
             />
             <small>of {size(Number(usage.storage_limit))} reserved</small>
+          </div>
+          <div className="storage">
+            <span>
+              Monthly uploads{" "}
+              <small>{size(Number(usage.upload_bytes_this_month))}</small>
+            </span>
+            <progress
+              value={Number(usage.upload_bytes_this_month)}
+              max={Number(usage.upload_bytes_monthly_limit)}
+            />
+            <small>
+              of {size(Number(usage.upload_bytes_monthly_limit))} this month
+            </small>
           </div>
           <button
             onClick={async () => {
