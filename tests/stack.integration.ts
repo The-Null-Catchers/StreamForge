@@ -585,6 +585,69 @@ test(
       assert.equal(renewedPlayback.body.subtitles.length, 1);
       assert.equal(renewedPlayback.body.subtitles[0].language, "ar");
       assert.match(renewedPlayback.body.subtitles[0].url, /token=/);
+
+      const embedPolicy = await request(
+        `/api/v1/videos/${v.id}/embed-policy`,
+        "PUT",
+        { allowedOrigins: ["https://allowed.example/path"] },
+      );
+      assert.equal(embedPolicy.status, 200, JSON.stringify(embedPolicy.body));
+      assert.deepEqual(embedPolicy.body.allowedOrigins, [
+        "https://allowed.example",
+      ]);
+      const embedToken = new URL(playback.embedUrl).hash.replace(
+        "#token=",
+        "",
+      );
+      assert.equal(
+        (
+          await request(`/api/v1/videos/${v.id}/embed/playback`, "POST", {
+            token: embedToken,
+            parentOrigin: "https://blocked.example",
+          })
+        ).status,
+        403,
+      );
+      const embedPlayback = await request(
+        `/api/v1/videos/${v.id}/embed/playback`,
+        "POST",
+        {
+          token: embedToken,
+          parentOrigin: "https://allowed.example/some/page",
+        },
+      );
+      assert.equal(
+        embedPlayback.status,
+        200,
+        JSON.stringify(embedPlayback.body),
+      );
+      assert.equal(embedPlayback.body.subtitles.length, 1);
+      assert.equal(
+        (
+          await request(
+            `/api/v1/videos/${v.id}/playback/refresh`,
+            "POST",
+            {
+              token: embedPlayback.body.token,
+              parentOrigin: "https://blocked.example",
+            },
+          )
+        ).status,
+        403,
+      );
+      assert.equal(
+        (
+          await request(
+            `/api/v1/videos/${v.id}/playback/refresh`,
+            "POST",
+            {
+              token: embedPlayback.body.token,
+              parentOrigin: "https://allowed.example",
+            },
+          )
+        ).status,
+        200,
+      );
       const transcriptSearch = await request(
         `/api/v1/videos/${v.id}/transcript?search=${encodeURIComponent("البحث")}`,
       );
