@@ -17,6 +17,7 @@ import { aiGenerationJob } from "./ai.js";
 import { syncLiveStreams } from "./live.js";
 import { liveImportJob } from "./live-import.js";
 import { cleanupStaleTempDirs } from "./temp-janitor.js";
+import { reconcileDispatchedOutbox } from "./outbox-reconcile.js";
 const logger = pino();
 const workerId = randomUUID();
 let stopping = false;
@@ -58,6 +59,17 @@ const workers = names.map((name) => {
     },
   );
   worker.on("error", (err) => logger.error({ err, workerId }, "worker error"));
+  worker.on("completed", (job) => {
+    if (!job.id) return;
+    void db
+      .query(
+        "UPDATE outbox SET acknowledged_at=coalesce(acknowledged_at,now()) WHERE id=$1",
+        [job.id],
+      )
+      .catch((err) =>
+        logger.error({ err, jobId: job.id }, "outbox acknowledgement failed"),
+      );
+  });
   worker.on("failed", (job, error) => {
     logger.error({ jobId: job?.id, workerId, err: error }, "job failed");
     if (!job || job.attemptsMade < (job.opts.attempts ?? 1)) return;
@@ -127,7 +139,16 @@ const workers = names.map((name) => {
           );
         }
       }
-    }).catch((err) => logger.error({ err }, "failed-state persistence error"));
+    })
+      .then(() =>
+        job.id
+          ? db.query(
+              "UPDATE outbox SET acknowledged_at=coalesce(acknowledged_at,now()) WHERE id=$1",
+              [job.id],
+            )
+          : undefined,
+      )
+      .catch((err) => logger.error({ err }, "failed-state persistence error"));
   });
   return worker;
 });
@@ -179,6 +200,15 @@ async function maintenance() {
       "DELETE FROM analytics_events WHERE created_at<now()-interval '90 days'",
     );
     await db.query("DELETE FROM auth_tokens WHERE expires_at<now()");
+    const restoredOutbox = await reconcileDispatchedOutbox(
+      db,
+      (name) => queues[name as QueueName],
+    );
+    if (restoredOutbox)
+      logger.warn(
+        { restoredOutbox },
+        "restored outbox messages missing from Redis",
+      );
     const removedTempDirs = await cleanupStaleTempDirs();
     if (removedTempDirs)
       logger.info({ removedTempDirs }, "stale worker temp directories removed");
