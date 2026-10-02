@@ -30,6 +30,7 @@ async function playbackPayload(video: any, sessionId: string) {
     .setIssuer("streamforge")
     .setAudience("playback")
     .setIssuedAt()
+    .setJti(crypto.randomUUID())
     .setExpirationTime(`${config.PLAYBACK_TTL_SECONDS}s`)
     .sign(playbackSecret);
   const base = `${config.PUBLIC_URL}/api/v1/media/${video.id}/`;
