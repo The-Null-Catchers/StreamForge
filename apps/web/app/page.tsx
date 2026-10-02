@@ -142,14 +142,17 @@ export default function Dashboard() {
     if (!authenticated) return;
     const token = sessionStorage.getItem("sf_pending_invite");
     if (!token) return;
+    sessionStorage.removeItem("sf_pending_invite");
     void post("/invites/accept", { token })
       .then(async (result) => {
-        sessionStorage.removeItem("sf_pending_invite");
         await loadWorkspaces();
         setWorkspace(result.workspaceId);
         setNotice("Workspace invitation accepted.");
       })
-      .catch((e) => setNotice(e.message));
+      .catch((e) => {
+        sessionStorage.setItem("sf_pending_invite", token);
+        setNotice(e.message);
+      });
   }, [authenticated, loadWorkspaces]);
   const load = useCallback(async () => {
     if (!workspace) return;
@@ -2673,7 +2676,8 @@ export default function Dashboard() {
                   className="inline-form"
                   onSubmit={async (e) => {
                     e.preventDefault();
-                    const f = new FormData(e.currentTarget);
+                    const formElement = e.currentTarget;
+                    const f = new FormData(formElement);
                     try {
                       await post(`/workspaces/${workspace}/invites`, {
                         email: f.get("email"),
@@ -2682,7 +2686,7 @@ export default function Dashboard() {
                       setNotice(
                         "Invitation email sent. The link is valid for 7 days.",
                       );
-                      e.currentTarget.reset();
+                      formElement.reset();
                     } catch (err) {
                       setNotice((err as Error).message);
                     }
