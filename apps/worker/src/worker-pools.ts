@@ -1,4 +1,4 @@
-import { queueNames, type QueueName } from "../../../packages/shared/src/queues.js";
+import { queueNames, type QueueName } from "../../../packages/shared/src/queue-names.js";
 
 export function workerQueueSelection(value: string) {
   const requested = value
