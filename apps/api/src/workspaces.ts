@@ -116,6 +116,50 @@ export async function workspaceRoutes(app: FastifyInstance) {
       return { ok: true };
     },
   );
+  app.post<{ Params: { id: string; user: string } }>(
+    "/api/v1/workspaces/:id/members/:user/transfer-owner",
+    async (req) => {
+      const a = await access(req, req.params.id, "owner");
+      uuid.parse(req.params.user);
+      if (!a.userId) throw new ApiError(403, "USER_REQUIRED");
+      if (a.userId === req.params.user)
+        throw new ApiError(400, "OWNER_TRANSFER_TARGET_REQUIRED");
+
+      await transaction(async (c) => {
+        const members = await c.query(
+          "SELECT user_id,role FROM workspace_members WHERE workspace_id=$1 FOR UPDATE",
+          [req.params.id],
+        );
+        const currentOwner = members.rows.find(
+          (member) => member.user_id === a.userId && member.role === "owner",
+        );
+        const target = members.rows.find(
+          (member) => member.user_id === req.params.user,
+        );
+        if (!currentOwner) throw new ApiError(409, "OWNER_CHANGED");
+        if (!target) throw new ApiError(404, "MEMBER_NOT_FOUND");
+        if (target.role === "owner") throw new ApiError(409, "ALREADY_OWNER");
+
+        await c.query(
+          "UPDATE workspace_members SET role='admin' WHERE workspace_id=$1 AND user_id=$2",
+          [req.params.id, a.userId],
+        );
+        await c.query(
+          "UPDATE workspace_members SET role='owner' WHERE workspace_id=$1 AND user_id=$2",
+          [req.params.id, req.params.user],
+        );
+      });
+
+      await audit(
+        req.params.id,
+        a,
+        "workspace.owner_transferred",
+        req.params.user,
+      );
+      return { ok: true, ownerUserId: req.params.user };
+    },
+  );
+
   app.delete<{ Params: { id: string; user: string } }>(
     "/api/v1/workspaces/:id/members/:user",
     async (req) => {
