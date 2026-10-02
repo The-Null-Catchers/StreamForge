@@ -90,15 +90,33 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
-  worker:
+  worker-media:
     <<: *app
     image: streamforge-worker:local
     build: { context: ., dockerfile: infra/docker/Dockerfile, target: worker }
-    volumes:
-      - "live_recordings:/recordings"
+    environment:
+      WORKER_QUEUES: media-probe,video-transcode,thumbnail-generation,hls-packaging
+      WORKER_MAINTENANCE: "false"
     stop_grace_period: 2h
     mem_limit: 3g
     cpus: 2
+    pids_limit: 256
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      storage-init: { condition: service_completed_successfully }
+  worker-control:
+    <<: *app
+    image: streamforge-worker:local
+    build: { context: ., dockerfile: infra/docker/Dockerfile, target: worker }
+    environment:
+      WORKER_QUEUES: subtitle-processing,webhooks,analytics,ai,live-import,cleanup
+      WORKER_MAINTENANCE: "true"
+    volumes:
+      - "live_recordings:/recordings"
+    stop_grace_period: 30m
+    mem_limit: 2g
+    cpus: 1
     pids_limit: 256
     depends_on:
       migrate: { condition: service_completed_successfully }
@@ -144,7 +162,8 @@ services:
     restart: "no"
     depends_on:
       api: { condition: service_healthy }
-      worker: { condition: service_started }
+      worker-media: { condition: service_started }
+      worker-control: { condition: service_started }
       caddy: { condition: service_started }
   prometheus:
     image: prom/prometheus:v3.5.0
