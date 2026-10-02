@@ -3,13 +3,13 @@ type OutboxRow = {
   queue: string;
 };
 
-type QueryResult<T = any> = {
-  rows: T[];
+type QueryResult = {
+  rows: any[];
   rowCount?: number | null;
 };
 
 type Queryable = {
-  query<T = any>(text: string, values?: unknown[]): Promise<QueryResult<T>>;
+  query(text: string, values?: any[]): Promise<QueryResult>;
 };
 
 type QueueJob = {
@@ -17,7 +17,7 @@ type QueueJob = {
 };
 
 type QueueLookup = {
-  getJob(id: string): Promise<QueueJob | null>;
+  getJob(id: string): Promise<QueueJob | null | undefined>;
 };
 
 export async function reconcileDispatchedOutbox(
@@ -25,7 +25,7 @@ export async function reconcileDispatchedOutbox(
   queueLookup: (name: string) => QueueLookup | undefined,
   graceMs = 120_000,
 ) {
-  const stale = await database.query<OutboxRow>(
+  const stale = await database.query(
     `SELECT id,queue
      FROM outbox
      WHERE dispatched_at IS NOT NULL
@@ -37,7 +37,7 @@ export async function reconcileDispatchedOutbox(
   );
 
   let restored = 0;
-  for (const row of stale.rows) {
+  for (const row of stale.rows as OutboxRow[]) {
     const queue = queueLookup(row.queue);
     if (!queue) continue;
 
