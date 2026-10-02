@@ -37,13 +37,22 @@ export default function Player({
   } | null>(null);
   const cues = useRef<{ start: number; end: number; url: string }[]>([]);
   const resumeAt = useRef<number | null>(null);
+  const parentOrigin = () => {
+    if (!sharedToken || !document.referrer) return undefined;
+    try {
+      return new URL(document.referrer).origin;
+    } catch {
+      return undefined;
+    }
+  };
   useEffect(() => {
     let active = true;
     setError("");
     (async () => {
       const p: Playback = sharedToken
-        ? await post(`/videos/${videoId}/playback/refresh`, {
+        ? await post(`/videos/${videoId}/embed/playback`, {
             token: sharedToken,
+            parentOrigin: parentOrigin(),
           })
         : await api(`/videos/${videoId}/playback`);
       if (active) setData(p);
@@ -59,6 +68,7 @@ export default function Player({
       const currentTime = ref.current?.currentTime ?? 0;
       void post(`/videos/${videoId}/playback/refresh`, {
         token: data.token,
+        ...(sharedToken ? { parentOrigin: parentOrigin() } : {}),
       })
         .then((renewed: Playback) => {
           resumeAt.current = currentTime;

@@ -39,6 +39,7 @@ type Video = {
   error_code?: string;
   review_status?: "pending" | "approved" | "changes_requested";
   active_version_id?: string;
+  embed_allowed_origins?: string[];
 };
 type Workspace = { id: string; name: string; role: string };
 type WorkspaceMember = { user_id: string; email: string; role: string };
@@ -894,6 +895,58 @@ export default function Dashboard() {
                   >
                     <Code2 size={16} /> Copy secure embed
                   </button>
+                  <form
+                    className="embed-policy-form"
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const form = new FormData(e.currentTarget);
+                      const allowedOrigins = String(form.get("origins") ?? "")
+                        .split(/[\n,]+/)
+                        .map((value) => value.trim())
+                        .filter(Boolean);
+                      try {
+                        const policy = await api(
+                          `/videos/${selected.id}/embed-policy`,
+                          {
+                            method: "PUT",
+                            body: JSON.stringify({ allowedOrigins }),
+                          },
+                        );
+                        setSelected((current) =>
+                          current
+                            ? {
+                                ...current,
+                                embed_allowed_origins: policy.allowedOrigins,
+                              }
+                            : current,
+                        );
+                        setNotice(
+                          policy.allowedOrigins.length
+                            ? "Embed domain restrictions saved."
+                            : "Embed domain restrictions cleared. Any parent origin may embed this video.",
+                        );
+                      } catch (err) {
+                        setNotice((err as Error).message);
+                      }
+                    }}
+                  >
+                    <label>
+                      Allowed embed origins
+                      <textarea
+                        name="origins"
+                        rows={3}
+                        defaultValue={(selected.embed_allowed_origins ?? []).join(
+                          "\n",
+                        )}
+                        placeholder={"https://example.com\nhttps://app.example.com"}
+                      />
+                    </label>
+                    <small>
+                      One HTTPS/HTTP origin per line. Leave empty to allow any
+                      parent origin.
+                    </small>
+                    <button>Save embed policy</button>
+                  </form>
                 </section>
               </div>
               <section className="panel">

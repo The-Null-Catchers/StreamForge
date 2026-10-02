@@ -114,6 +114,38 @@ export async function videoRoutes(app: FastifyInstance) {
     await audit(v.workspace_id, a, "video.updated", v.id);
     return { ok: true };
   });
+  app.put<{ Params: { id: string } }>(
+    "/api/v1/videos/:id/embed-policy",
+    async (req) => {
+      const v = await videoAccess(req, req.params.id, "editor", "videos:write");
+      const body = z
+        .object({
+          allowedOrigins: z
+            .array(z.url().max(2048))
+            .max(20)
+            .default([]),
+        })
+        .parse(req.body);
+      const allowedOrigins = Array.from(
+        new Set(
+          body.allowedOrigins.map((value) => {
+            const url = new URL(value);
+            if (!["http:", "https:"].includes(url.protocol))
+              throw new ApiError(400, "INVALID_EMBED_ORIGIN");
+            return url.origin;
+          }),
+        ),
+      );
+      const a = await access(req, v.workspace_id, "editor", "videos:write");
+      await db.query(
+        "UPDATE videos SET embed_allowed_origins=$1,updated_at=now() WHERE id=$2",
+        [allowedOrigins, v.id],
+      );
+      await audit(v.workspace_id, a, "video.embed_policy_updated", v.id);
+      return { allowedOrigins };
+    },
+  );
+
   app.delete<{ Params: { id: string } }>("/api/v1/videos/:id", async (req) => {
     const v = await videoAccess(req, req.params.id, "editor", "videos:write");
     const a = await access(req, v.workspace_id, "editor", "videos:write");

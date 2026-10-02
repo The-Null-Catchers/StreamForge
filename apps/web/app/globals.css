@@ -20,13 +20,15 @@ body {
 }
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 button,
 a,
 input,
-select {
+select,
+textarea {
   outline-offset: 4px;
 }
 button {
@@ -61,7 +63,8 @@ a {
   text-decoration: none;
 }
 input,
-select {
+select,
+textarea {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 11px 12px;
@@ -768,6 +771,16 @@ code {
 .inline-form input[type="file"] {
   max-width: 290px;
   font-size: 11px;
+}
+.embed-policy-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+.embed-policy-form textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 82px;
 }
 .checkbox {
   font-size: 10px;
