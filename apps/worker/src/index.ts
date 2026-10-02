@@ -18,22 +18,16 @@ import { syncLiveStreams } from "./live.js";
 import { liveImportJob } from "./live-import.js";
 import { cleanupStaleTempDirs } from "./temp-janitor.js";
 import { reconcileDispatchedOutbox } from "./outbox-reconcile.js";
+import { workerQueueSelection } from "./worker-pools.js";
 const logger = pino();
 const workerId = randomUUID();
 let stopping = false;
 let dispatching = false;
-const names: QueueName[] = [
-  "media-probe",
-  "video-transcode",
-  "thumbnail-generation",
-  "hls-packaging",
-  "subtitle-processing",
-  "webhooks",
-  "analytics",
-  "ai",
-  "live-import",
-  "cleanup",
-];
+const names: QueueName[] = workerQueueSelection(config.WORKER_QUEUES);
+logger.info(
+  { workerId, queues: names, maintenance: config.WORKER_MAINTENANCE },
+  "worker pool configured",
+);
 const workers = names.map((name) => {
   const worker = new Worker(
     name,
@@ -183,6 +177,7 @@ async function maintenance() {
       "-inf",
       Date.now() - 60000,
     );
+    if (!config.WORKER_MAINTENANCE) return;
     await transaction(async (c) => {
       const expired = await c.query(
         "UPDATE uploads SET status='expired' WHERE status='uploading' AND expires_at<now() RETURNING video_id",
