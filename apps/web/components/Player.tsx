@@ -5,6 +5,7 @@ import { api, post } from "../lib/api";
 type Playback = {
   url: string;
   token: string;
+  expiresIn: number;
   poster: string;
   previews: string;
   subtitles: {
@@ -35,32 +36,44 @@ export default function Player({
     position: number;
   } | null>(null);
   const cues = useRef<{ start: number; end: number; url: string }[]>([]);
+  const resumeAt = useRef<number | null>(null);
   useEffect(() => {
     let active = true;
     setError("");
     (async () => {
-      let p: Playback;
-      if (sharedToken) {
-        const base = `/api/v1/media/${videoId}/`;
-        p = {
-          url:
-            base + `hls/master.m3u8?token=${encodeURIComponent(sharedToken)}`,
-          token: sharedToken,
-          poster:
-            base +
-            `thumbnails/poster.jpg?token=${encodeURIComponent(sharedToken)}`,
-          previews:
-            base +
-            `thumbnails/previews.vtt?token=${encodeURIComponent(sharedToken)}`,
-          subtitles: [],
-        };
-      } else p = await api(`/videos/${videoId}/playback`);
+      const p: Playback = sharedToken
+        ? await post(`/videos/${videoId}/playback/refresh`, {
+            token: sharedToken,
+          })
+        : await api(`/videos/${videoId}/playback`);
       if (active) setData(p);
     })().catch((e) => setError(e.message));
     return () => {
       active = false;
     };
   }, [videoId, sharedToken, retry]);
+  useEffect(() => {
+    if (!data) return;
+    const delaySeconds = Math.max(30, data.expiresIn - 60);
+    const timer = window.setTimeout(() => {
+      const currentTime = ref.current?.currentTime ?? 0;
+      void post(`/videos/${videoId}/playback/refresh`, {
+        token: data.token,
+      })
+        .then((renewed: Playback) => {
+          resumeAt.current = currentTime;
+          setData(renewed);
+          setError("");
+        })
+        .catch(() =>
+          setError(
+            "Playback authorization could not be renewed. Retry playback to continue.",
+          ),
+        );
+    }, delaySeconds * 1000);
+    return () => window.clearTimeout(timer);
+  }, [data, videoId]);
+
   useEffect(() => {
     const video = ref.current;
     if (!data || !video) return;
@@ -136,6 +149,12 @@ export default function Player({
     const handlers: Record<string, () => void> = {
       loadedmetadata: () => {
         send("video_loaded");
+        if (resumeAt.current !== null) {
+          const target = resumeAt.current;
+          resumeAt.current = null;
+          if (!disposed && target < video.duration - 1) video.currentTime = target;
+          return;
+        }
         if (!sharedToken)
           void api(`/videos/${videoId}/progress`)
             .then((p) => {
