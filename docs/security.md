@@ -4,7 +4,7 @@
 
 - Argon2id password hashing; verified email before login; one-use verification/reset token hashes with expiry.
 - Fifteen-minute access JWTs backed by live session records. Thirty-day refresh families rotate transactionally; detected reuse revokes the family. Reset revokes all sessions.
-- Bearer auth avoids ambient authentication-cookie CSRF. Web tokens live in sessionStorage; mobile refresh tokens use platform secure storage. XSS remains a token-theft risk, so do not render arbitrary HTML. Add a nonce-based CSP before public deployment.
+- Bearer auth avoids ambient authentication-cookie CSRF. Web tokens live in sessionStorage; mobile refresh tokens use platform secure storage. XSS remains a token-theft risk, so do not render arbitrary HTML. The web app now emits a per-request nonce-based Content Security Policy with strict-dynamic scripts, blocks objects/base injection, restricts network/media/worker sources, and prevents framing except on the intentional `/embed/*` playback surface.
 - Every private video and upload operation checks current workspace role or scoped key. Owner-only role changes/removal prevent removal/demotion of the sole owner. Keys cannot administer memberships, keys or webhooks.
 - API keys are random and stored as SHA-256 hashes; raw keys are displayed once. `sf_test_` is a label only; it is not an isolated billing/sandbox environment.
 - Zod request validation, UUID checks, bounded body/chunk sizes, bounded pagination, strict CORS and Redis-backed rate limits. Caddy is the one trusted proxy hop; do not expose the API listener directly to an untrusted network.
