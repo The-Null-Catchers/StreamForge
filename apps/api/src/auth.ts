@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { db, transaction } from "../../../packages/shared/src/db.js";
 import { hash, opaque } from "../../../packages/shared/src/security.js";
+import { config } from "../../../packages/config/src/index.js";
 import { ApiError, actor, accessToken, uuid } from "./context.js";
 import { sendMail } from "./mail.js";
 const credentials = z.object({
@@ -29,7 +30,7 @@ async function sendToken(
       kind === "verify"
         ? "Verify your StreamForge email"
         : "Reset your StreamForge password",
-    text: `Open ${process.env.PUBLIC_URL ?? "http://localhost:8080"}/?${kind}=${token}`,
+    text: `Open ${config.PUBLIC_URL}/?${kind}=${token}`,
   });
 }
 async function newSession(user: string) {
