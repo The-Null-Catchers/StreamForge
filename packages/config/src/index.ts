@@ -17,6 +17,11 @@ const schema = z.object({
   S3_SECRET_KEY: z.string(),
   S3_FORCE_PATH_STYLE: z.string().default("true"),
   TRANSCODE_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(2),
+  WORKER_QUEUES: z.string().default(""),
+  WORKER_MAINTENANCE: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
   MAX_UPLOAD_SIZE_GB: z.coerce.number().positive().default(20),
   MAX_VIDEO_DURATION_HOURS: z.coerce.number().positive().default(6),
   UPLOAD_TTL_HOURS: z.coerce.number().positive().default(48),
