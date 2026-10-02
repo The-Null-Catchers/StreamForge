@@ -342,6 +342,25 @@ test(
         ).status,
         422,
       );
+      await db.query(
+        "UPDATE workspaces SET upload_bytes_monthly_limit=$2 WHERE id=$1",
+        [ws.id, first.length - 1],
+      );
+      assert.equal(
+        (
+          await request(
+            `/api/v1/uploads/${u.id}/parts/0`,
+            "PUT",
+            first,
+            headers,
+          )
+        ).status,
+        409,
+      );
+      await db.query(
+        "UPDATE workspaces SET upload_bytes_monthly_limit=$2 WHERE id=$1",
+        [ws.id, bytes.length * 10],
+      );
       assert.equal(
         (
           await request(
@@ -352,6 +371,15 @@ test(
           )
         ).status,
         200,
+      );
+      const uploadUsage = await request(
+        `/api/v1/workspaces/${ws.id}/usage`,
+      );
+      assert.equal(uploadUsage.status, 200);
+      assert.equal(Number(uploadUsage.body.upload_bytes_this_month), first.length);
+      assert.equal(
+        Number(uploadUsage.body.upload_bytes_monthly_limit),
+        bytes.length * 10,
       );
       // Reconnect after only the first chunk, then skip confirmed parts.
       const resumed = await request(`/api/v1/uploads/${u.id}`);
