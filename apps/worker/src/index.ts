@@ -16,6 +16,7 @@ import { transcriptionJob } from "./transcription.js";
 import { aiGenerationJob } from "./ai.js";
 import { syncLiveStreams } from "./live.js";
 import { liveImportJob } from "./live-import.js";
+import { cleanupStaleTempDirs } from "./temp-janitor.js";
 const logger = pino();
 const workerId = randomUUID();
 let stopping = false;
@@ -178,6 +179,9 @@ async function maintenance() {
       "DELETE FROM analytics_events WHERE created_at<now()-interval '90 days'",
     );
     await db.query("DELETE FROM auth_tokens WHERE expires_at<now()");
+    const removedTempDirs = await cleanupStaleTempDirs();
+    if (removedTempDirs)
+      logger.info({ removedTempDirs }, "stale worker temp directories removed");
   } catch (err) {
     logger.error({ err }, "maintenance failed");
   }
