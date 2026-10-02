@@ -80,6 +80,7 @@ export default function Dashboard() {
   const [uploadPct, setUploadPct] = useState(0);
   const [speed, setSpeed] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const [keys, setKeys] = useState<any[]>([]);
@@ -340,11 +341,24 @@ export default function Dashboard() {
           setSpeed(bps);
         },
         (pct) => setUploadState(`Checking file integrity · ${pct}%`),
+        (uploadSession) => {
+          setActiveUploadId(uploadSession.id);
+          if (uploadSession.resumed) {
+            const confirmedPct = Math.round(
+              (uploadSession.uploadedBytes / uploadSession.totalSize) * 100,
+            );
+            setUploadPct(confirmedPct);
+            setUploadState(
+              `Existing upload found · ${confirmedPct}% already confirmed. Resuming safely.`,
+            );
+          }
+        },
       );
       if (abort.current.signal.aborted)
         setUploadState("Paused. Select Resume to continue.");
       else {
         setUploadState("Upload complete. Processing has started.");
+        setActiveUploadId(null);
         setFile(null);
       }
       await load();
@@ -355,6 +369,31 @@ export default function Dashboard() {
       setUploading(false);
     }
   }
+  async function cancelUpload() {
+    if (!activeUploadId) {
+      setFile(null);
+      setUploadPct(0);
+      setSpeed(0);
+      setUploadState("");
+      if (input.current) input.current.value = "";
+      return;
+    }
+    if (!confirm("Cancel this upload and discard its confirmed chunks?")) return;
+    abort.current?.abort();
+    try {
+      await api(`/uploads/${activeUploadId}`, { method: "DELETE" });
+      setActiveUploadId(null);
+      setFile(null);
+      setUploadPct(0);
+      setSpeed(0);
+      setUploadState("Upload cancelled. Confirmed chunks are queued for cleanup.");
+      if (input.current) input.current.value = "";
+      await load();
+    } catch (e) {
+      setNotice((e as Error).message);
+    }
+  }
+
   async function createWorkspace() {
     const name = prompt("Workspace name");
     if (!name) return;
@@ -1477,19 +1516,32 @@ export default function Dashboard() {
                     </p>
                     <progress max={100} value={uploadPct} />
                   </div>
-                  {file &&
-                    (uploading ? (
-                      <button onClick={() => abort.current?.abort()}>
-                        Pause
-                      </button>
-                    ) : (
-                      <button
-                        className="primary"
-                        onClick={() => void startUpload()}
-                      >
-                        Start / Resume
-                      </button>
-                    ))}
+                  {file && (
+                    <div className="upload-actions">
+                      {uploading ? (
+                        <button onClick={() => abort.current?.abort()}>
+                          Pause
+                        </button>
+                      ) : (
+                        <button
+                          className="primary"
+                          onClick={() => void startUpload()}
+                        >
+                          Start / Resume
+                        </button>
+                      )}
+                      {activeUploadId ? (
+                        <button
+                          className="danger"
+                          onClick={() => void cancelUpload()}
+                        >
+                          Cancel upload
+                        </button>
+                      ) : !uploading ? (
+                        <button onClick={() => void cancelUpload()}>Remove</button>
+                      ) : null}
+                    </div>
+                  )}
                 </section>
               ) : (
                 <button
