@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db, transaction } from "../../../packages/shared/src/db.js";
 import { opaque, hash } from "../../../packages/shared/src/security.js";
 import { actor, access, audit, ApiError, uuid } from "./context.js";
+import { sendWorkspaceInvite } from "./mail.js";
 export async function workspaceRoutes(app: FastifyInstance) {
   app.get("/api/v1/workspaces", async (req) => {
     const a = await actor(req);
@@ -56,12 +57,30 @@ export async function workspaceRoutes(app: FastifyInstance) {
         })
         .parse(req.body);
       const token = opaque();
+      const tokenHash = hash(token);
+      const workspace = (
+        await db.query("SELECT name FROM workspaces WHERE id=$1", [req.params.id])
+      ).rows[0];
       await db.query(
         "INSERT INTO workspace_invites(workspace_id,email,role,token_hash,expires_at) VALUES($1,$2,$3,$4,now()+interval '7 days')",
-        [req.params.id, b.email, b.role, hash(token)],
+        [req.params.id, b.email, b.role, tokenHash],
       );
+      try {
+        await sendWorkspaceInvite({
+          to: b.email,
+          workspaceName: workspace.name,
+          role: b.role,
+          token,
+        });
+      } catch {
+        await db.query(
+          "DELETE FROM workspace_invites WHERE workspace_id=$1 AND token_hash=$2",
+          [req.params.id, tokenHash],
+        );
+        throw new ApiError(502, "INVITE_EMAIL_FAILED");
+      }
       await audit(req.params.id, a, "member.invited", b.email);
-      return { token, expiresIn: 604800 };
+      return { token, expiresIn: 604800, delivered: true };
     },
   );
   app.post("/api/v1/invites/accept", async (req) => {
