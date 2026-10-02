@@ -1,26 +1,17 @@
 import type { FastifyInstance } from "fastify";
 import argon2 from "argon2";
 import { randomUUID } from "node:crypto";
-import nodemailer from "nodemailer";
 import { z } from "zod";
 import { db, transaction } from "../../../packages/shared/src/db.js";
 import { hash, opaque } from "../../../packages/shared/src/security.js";
-import { config } from "../../../packages/config/src/index.js";
 import { ApiError, actor, accessToken, uuid } from "./context.js";
+import { sendMail } from "./mail.js";
 const credentials = z.object({
   email: z
     .email()
     .max(254)
     .transform((x) => x.toLowerCase()),
   password: z.string().min(12).max(128),
-});
-const mail = nodemailer.createTransport({
-  host: config.SMTP_HOST,
-  port: config.SMTP_PORT,
-  secure: config.SMTP_PORT === 465,
-  auth: config.SMTP_USER
-    ? { user: config.SMTP_USER, pass: config.SMTP_PASSWORD }
-    : undefined,
 });
 async function sendToken(
   user: string,
@@ -32,14 +23,13 @@ async function sendToken(
     "INSERT INTO auth_tokens(user_id,kind,token_hash,expires_at) VALUES($1,$2,$3,now()+interval '1 hour')",
     [user, kind, hash(token)],
   );
-  await mail.sendMail({
-    from: config.MAIL_FROM,
+  await sendMail({
     to: email,
     subject:
       kind === "verify"
         ? "Verify your StreamForge email"
         : "Reset your StreamForge password",
-    text: `Open ${config.PUBLIC_URL}/?${kind}=${token}`,
+    text: `Open ${process.env.PUBLIC_URL ?? "http://localhost:8080"}/?${kind}=${token}`,
   });
 }
 async function newSession(user: string) {
