@@ -1,22 +1,11 @@
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
 import { config } from "../../config/src/index.js";
+import { queueNames, type QueueName } from "./queue-names.js";
+export { queueNames, type QueueName } from "./queue-names.js";
 export const redis = new Redis(config.REDIS_URL, {
   maxRetriesPerRequest: null,
 });
-export const queueNames = [
-  "media-probe",
-  "video-transcode",
-  "thumbnail-generation",
-  "hls-packaging",
-  "subtitle-processing",
-  "webhooks",
-  "analytics",
-  "ai",
-  "live-import",
-  "cleanup",
-] as const;
-export type QueueName = (typeof queueNames)[number];
 export const queues = Object.fromEntries(
   queueNames.map((name) => [
     name,
