@@ -20,15 +20,64 @@ export async function playbackClaims(token: string) {
   }
 }
 
-async function playbackPayload(video: any, sessionId: string) {
+function normalizeOrigin(value?: string) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol)) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+function assertEmbedOrigin(video: any, value?: string) {
+  const origin = normalizeOrigin(value);
+  const allowed = (video.embed_allowed_origins ?? []) as string[];
+  if (allowed.length && (!origin || !allowed.includes(origin)))
+    throw new ApiError(403, "EMBED_ORIGIN_NOT_ALLOWED");
+  return origin;
+}
+
+async function embedBootstrapClaims(token: string) {
+  try {
+    return (
+      await jwtVerify(token, playbackSecret, {
+        issuer: "streamforge",
+        audience: "embed-bootstrap",
+      })
+    ).payload;
+  } catch {
+    throw new ApiError(401, "INVALID_EMBED_TOKEN");
+  }
+}
+
+async function playbackPayload(
+  video: any,
+  sessionId: string,
+  embedOrigin?: string | null,
+) {
   const token = await new SignJWT({
+    videoId: video.id,
+    sessionId,
+    prefix: video.output_prefix,
+    ...(embedOrigin ? { embedOrigin } : {}),
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuer("streamforge")
+    .setAudience("playback")
+    .setIssuedAt()
+    .setJti(crypto.randomUUID())
+    .setExpirationTime(`${config.PLAYBACK_TTL_SECONDS}s`)
+    .sign(playbackSecret);
+  const embedToken = await new SignJWT({
     videoId: video.id,
     sessionId,
     prefix: video.output_prefix,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuer("streamforge")
-    .setAudience("playback")
+    .setAudience("embed-bootstrap")
     .setIssuedAt()
     .setJti(crypto.randomUUID())
     .setExpirationTime(`${config.PLAYBACK_TTL_SECONDS}s`)
@@ -52,7 +101,7 @@ async function playbackPayload(video: any, sessionId: string) {
       forced: subtitle.forced,
       url: base + `subtitles/${subtitle.id}.vtt` + suffix,
     })),
-    embedUrl: `${config.PUBLIC_URL}/embed/${video.id}#token=${token}`,
+    embedUrl: `${config.PUBLIC_URL}/embed/${video.id}#token=${embedToken}`,
   };
 }
 
@@ -84,7 +133,12 @@ export async function playbackRoutes(app: FastifyInstance) {
     Body: { token: string };
   }>("/api/v1/videos/:id/playback/refresh", async (req) => {
     uuid.parse(req.params.id);
-    const body = z.object({ token: z.string().min(20).max(4096) }).parse(req.body);
+    const body = z
+      .object({
+        token: z.string().min(20).max(4096),
+        parentOrigin: z.string().max(2048).optional(),
+      })
+      .parse(req.body);
     const claims = await playbackClaims(body.token);
     if (claims.videoId !== req.params.id)
       throw new ApiError(403, "PLAYBACK_SCOPE_MISMATCH");
@@ -96,6 +150,12 @@ export async function playbackRoutes(app: FastifyInstance) {
     ).rows[0];
     if (!video || claims.prefix !== video.output_prefix)
       throw new ApiError(404, "VIDEO_UNAVAILABLE");
+    let embedOrigin: string | null = null;
+    if (typeof claims.embedOrigin === "string") {
+      embedOrigin = assertEmbedOrigin(video, body.parentOrigin);
+      if (embedOrigin !== claims.embedOrigin)
+        throw new ApiError(403, "EMBED_ORIGIN_MISMATCH");
+    }
     const renewed = await db.query(
       `UPDATE playback_sessions
        SET expires_at=now()+$1*interval '1 second',last_seen_at=now()
@@ -105,7 +165,42 @@ export async function playbackRoutes(app: FastifyInstance) {
     );
     if (!renewed.rowCount)
       throw new ApiError(401, "PLAYBACK_SESSION_UNAVAILABLE");
-    return playbackPayload(video, renewed.rows[0].id);
+    return playbackPayload(video, renewed.rows[0].id, embedOrigin);
+  });
+
+  app.post<{
+    Params: { id: string };
+    Body: { token: string; parentOrigin?: string };
+  }>("/api/v1/videos/:id/embed/playback", async (req) => {
+    uuid.parse(req.params.id);
+    const body = z
+      .object({
+        token: z.string().min(20).max(4096),
+        parentOrigin: z.string().max(2048).optional(),
+      })
+      .parse(req.body);
+    const claims = await embedBootstrapClaims(body.token);
+    if (claims.videoId !== req.params.id)
+      throw new ApiError(403, "PLAYBACK_SCOPE_MISMATCH");
+    const video = (
+      await db.query(
+        "SELECT * FROM videos WHERE id=$1 AND status='ready' AND deleted_at IS NULL",
+        [req.params.id],
+      )
+    ).rows[0];
+    if (!video || claims.prefix !== video.output_prefix)
+      throw new ApiError(404, "VIDEO_UNAVAILABLE");
+    const embedOrigin = assertEmbedOrigin(video, body.parentOrigin);
+    const session = await db.query(
+      `UPDATE playback_sessions
+       SET expires_at=now()+$1*interval '1 second',last_seen_at=now()
+       WHERE id=$2 AND video_id=$3
+       RETURNING id`,
+      [config.PLAYBACK_TTL_SECONDS, claims.sessionId, video.id],
+    );
+    if (!session.rowCount)
+      throw new ApiError(401, "PLAYBACK_SESSION_UNAVAILABLE");
+    return playbackPayload(video, session.rows[0].id, embedOrigin);
   });
 
   app.get<{
