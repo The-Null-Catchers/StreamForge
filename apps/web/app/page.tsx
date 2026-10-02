@@ -41,6 +41,7 @@ type Video = {
   active_version_id?: string;
 };
 type Workspace = { id: string; name: string; role: string };
+type WorkspaceMember = { user_id: string; email: string; role: string };
 const size = (n: number) =>
   n > 1024 ** 3
     ? `${(n / 1024 ** 3).toFixed(1)} GB`
@@ -56,6 +57,7 @@ export default function Dashboard() {
   const [busy, setBusy] = useState(false);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspace, setWorkspace] = useState("");
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [view, setView] = useState("grid");
   const [section, setSection] = useState("library");
@@ -305,6 +307,10 @@ export default function Dashboard() {
           setOperations(null);
           setNotice(e.message);
         });
+    if (section === "settings")
+      void api(`/workspaces/${workspace}/members`)
+        .then(setMembers)
+        .catch((e) => setNotice(e.message));
   }, [section, workspace]);
   async function savePlaylistItems(nextItems: any[]) {
     if (!playlistDetail) return;
@@ -2670,6 +2676,120 @@ export default function Dashboard() {
                   <p>Manage access with workspace-scoped roles.</p>
                 </div>
               </div>
+              <section className="panel">
+                <h3>Members</h3>
+                {members.length ? (
+                  members.map((member) => {
+                    const workspaceRole =
+                      workspaces.find((item) => item.id === workspace)?.role ??
+                      "viewer";
+                    const canManage =
+                      workspaceRole === "owner" && member.role !== "owner";
+                    return (
+                      <div className="resource-row" key={member.user_id}>
+                        <div>
+                          <strong>{member.email}</strong>
+                          <p>{member.role}</p>
+                        </div>
+                        <select
+                          aria-label={`Role for ${member.email}`}
+                          value={member.role}
+                          disabled={!canManage}
+                          onChange={async (e) => {
+                            try {
+                              await api(
+                                `/workspaces/${workspace}/members/${member.user_id}`,
+                                {
+                                  method: "PATCH",
+                                  body: JSON.stringify({ role: e.target.value }),
+                                },
+                              );
+                              setMembers(
+                                await api(
+                                  `/workspaces/${workspace}/members`,
+                                ),
+                              );
+                              setNotice("Member role updated.");
+                            } catch (err) {
+                              setNotice((err as Error).message);
+                            }
+                          }}
+                        >
+                          {member.role === "owner" && <option>owner</option>}
+                          <option>admin</option>
+                          <option>editor</option>
+                          <option>viewer</option>
+                        </select>
+                        {canManage && (
+                          <>
+                            <button
+                              onClick={async () => {
+                                if (
+                                  !confirm(
+                                    `Transfer workspace ownership to ${member.email}? You will become an admin.`,
+                                  )
+                                )
+                                  return;
+                                try {
+                                  await api(
+                                    `/workspaces/${workspace}/members/${member.user_id}/transfer-owner`,
+                                    {
+                                      method: "POST",
+                                      body: JSON.stringify({}),
+                                    },
+                                  );
+                                  await loadWorkspaces();
+                                  setMembers(
+                                    await api(
+                                      `/workspaces/${workspace}/members`,
+                                    ),
+                                  );
+                                  setNotice(
+                                    `Ownership transferred to ${member.email}.`,
+                                  );
+                                } catch (err) {
+                                  setNotice((err as Error).message);
+                                }
+                              }}
+                            >
+                              Transfer ownership
+                            </button>
+                            <button
+                              className="danger"
+                              onClick={async () => {
+                                if (
+                                  !confirm(
+                                    `Remove ${member.email} from this workspace?`,
+                                  )
+                                )
+                                  return;
+                                try {
+                                  await api(
+                                    `/workspaces/${workspace}/members/${member.user_id}`,
+                                    { method: "DELETE" },
+                                  );
+                                  setMembers(
+                                    await api(
+                                      `/workspaces/${workspace}/members`,
+                                    ),
+                                  );
+                                  setNotice("Member removed.");
+                                } catch (err) {
+                                  setNotice((err as Error).message);
+                                }
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p>No members found.</p>
+                )}
+              </section>
               <section className="panel">
                 <h3>Invite a teammate</h3>
                 <form
