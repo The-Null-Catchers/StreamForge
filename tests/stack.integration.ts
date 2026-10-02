@@ -853,7 +853,13 @@ test(
           `/api/v1/videos/${v.id}/analytics/daily?days=1`,
         );
         daily = result.body;
-        if (daily.length && Number(daily[0].plays) === 1) break;
+        if (
+          daily.length &&
+          Number(daily[0].plays) === 1 &&
+          Number(daily[0].unique_viewers) === 1 &&
+          Number(daily[0].watch_seconds) === 5
+        )
+          break;
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
       assert.equal(daily.length, 1);
