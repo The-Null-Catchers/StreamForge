@@ -19,6 +19,42 @@ export async function playbackClaims(token: string) {
     throw new ApiError(401, "INVALID_PLAYBACK_TOKEN");
   }
 }
+
+async function playbackPayload(video: any, sessionId: string) {
+  const token = await new SignJWT({
+    videoId: video.id,
+    sessionId,
+    prefix: video.output_prefix,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuer("streamforge")
+    .setAudience("playback")
+    .setIssuedAt()
+    .setExpirationTime(`${config.PLAYBACK_TTL_SECONDS}s`)
+    .sign(playbackSecret);
+  const base = `${config.PUBLIC_URL}/api/v1/media/${video.id}/`;
+  const suffix = `?token=${token}`;
+  return {
+    token,
+    sessionId,
+    expiresIn: config.PLAYBACK_TTL_SECONDS,
+    url: base + "hls/master.m3u8" + suffix,
+    poster: base + "thumbnails/poster.jpg" + suffix,
+    previews: base + "thumbnails/previews.vtt" + suffix,
+    subtitles: (
+      await db.query("SELECT * FROM subtitles WHERE video_id=$1", [video.id])
+    ).rows.map((subtitle) => ({
+      id: subtitle.id,
+      language: subtitle.language,
+      label: subtitle.label,
+      default: subtitle.is_default,
+      forced: subtitle.forced,
+      url: base + `subtitles/${subtitle.id}.vtt` + suffix,
+    })),
+    embedUrl: `${config.PUBLIC_URL}/embed/${video.id}#token=${token}`,
+  };
+}
+
 export async function playbackRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>(
     "/api/v1/videos/:id/playback",
@@ -39,40 +75,38 @@ export async function playbackRoutes(app: FastifyInstance) {
           [v.id, config.PLAYBACK_TTL_SECONDS],
         )
       ).rows[0];
-      const token = await new SignJWT({
-        videoId: v.id,
-        sessionId: session.id,
-        prefix: v.output_prefix,
-      })
-        .setProtectedHeader({ alg: "HS256" })
-        .setIssuer("streamforge")
-        .setAudience("playback")
-        .setIssuedAt()
-        .setExpirationTime(`${config.PLAYBACK_TTL_SECONDS}s`)
-        .sign(playbackSecret);
-      const base = `${config.PUBLIC_URL}/api/v1/media/${v.id}/`;
-      const suffix = `?token=${token}`;
-      return {
-        token,
-        sessionId: session.id,
-        expiresIn: config.PLAYBACK_TTL_SECONDS,
-        url: base + "hls/master.m3u8" + suffix,
-        poster: base + "thumbnails/poster.jpg" + suffix,
-        previews: base + "thumbnails/previews.vtt" + suffix,
-        subtitles: (
-          await db.query("SELECT * FROM subtitles WHERE video_id=$1", [v.id])
-        ).rows.map((s) => ({
-          id: s.id,
-          language: s.language,
-          label: s.label,
-          default: s.is_default,
-          forced: s.forced,
-          url: base + `subtitles/${s.id}.vtt` + suffix,
-        })),
-        embedUrl: `${config.PUBLIC_URL}/embed/${v.id}#token=${token}`,
-      };
+      return playbackPayload(v, session.id);
     },
   );
+  app.post<{
+    Params: { id: string };
+    Body: { token: string };
+  }>("/api/v1/videos/:id/playback/refresh", async (req) => {
+    uuid.parse(req.params.id);
+    const body = z.object({ token: z.string().min(20).max(4096) }).parse(req.body);
+    const claims = await playbackClaims(body.token);
+    if (claims.videoId !== req.params.id)
+      throw new ApiError(403, "PLAYBACK_SCOPE_MISMATCH");
+    const video = (
+      await db.query(
+        "SELECT * FROM videos WHERE id=$1 AND status='ready' AND deleted_at IS NULL",
+        [req.params.id],
+      )
+    ).rows[0];
+    if (!video || claims.prefix !== video.output_prefix)
+      throw new ApiError(404, "VIDEO_UNAVAILABLE");
+    const renewed = await db.query(
+      `UPDATE playback_sessions
+       SET expires_at=now()+$1*interval '1 second',last_seen_at=now()
+       WHERE id=$2 AND video_id=$3
+       RETURNING id`,
+      [config.PLAYBACK_TTL_SECONDS, claims.sessionId, video.id],
+    );
+    if (!renewed.rowCount)
+      throw new ApiError(401, "PLAYBACK_SESSION_UNAVAILABLE");
+    return playbackPayload(video, renewed.rows[0].id);
+  });
+
   app.get<{
     Params: { id: string; "*": string };
     Querystring: { token: string };
