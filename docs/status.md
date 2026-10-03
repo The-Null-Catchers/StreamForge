@@ -7,7 +7,7 @@ This document distinguishes code that performs real work from design groundwork 
 | Auth          | Registration, verification/reset email, rotating refresh families, sessions/logout APIs, nonce-based CSP and browser security headers | External auth/security review |
 | Workspaces    | Membership roles, member-management UI, owner-only role/remove API, atomic owner transfer with single-owner DB invariant, invitation email delivery/link acceptance, audit/notification API | Pending-invite revocation and workspace rename/delete UX |
 | Uploads       | Real 8 MiB chunks, checksums, durable status, resume/retry, pause/cancel UI, resumed-session duplicate warning, cancel API, expiry | tus compatibility, direct S3 multipart |
-| Media         | Real FFprobe, source-aware H.264/AAC HLS, poster, timeline images/VTT                                                        | Configurable profiles, multitrack audio, manual poster, sprites, CMAF                                   |
+| Media         | Real FFprobe, source-aware H.264/AAC HLS, selectable data-saver/balanced/high-quality transcoding profiles with profile-aware compute accounting, poster, timeline images/VTT | Multitrack audio, manual poster, sprites, CMAF |
 | Reliability   | Durable outbox with completion acknowledgements and Redis-loss reconciliation, idempotent stages, leases, backoff, timeouts, progress, soft-delete cleanup, periodic stale worker-temp janitor, dedicated media/control worker pools | Pool autoscaling and per-queue SLO tuning |
 | Playback      | Signed playlist/segment access, current-state delete revocation, automatic token renewal, shared-embed subtitle metadata, per-video embed origin restrictions, ABR/manual HLS.js, seek/speed/PiP, keyboard, saved position | Mobile subtitle selection |
 | Library       | Actual API-driven grid/table, search, status filter, detail and metadata                                                     | Duration/resolution/date/privacy filters; API supports privacy and sorting       |
@@ -22,8 +22,8 @@ This document distinguishes code that performs real work from design groundwork 
 ## Local verification
 
 - TypeScript checks and Next.js production build are run during implementation.
-- Unit tests cover permissions, no-upscale profiles, chunk boundaries, integrity/HMAC verification, replay window and Arabic subtitle conversion.
-- Real FFmpeg tests generate a short 720p clip, produce three renditions, decode each playlist, generate poster/preview assets, and process a silent small source.
+- Unit tests cover permissions, no-upscale profiles, configurable profile ladders, chunk boundaries, integrity/HMAC verification, replay window and Arabic subtitle conversion.
+- Real FFmpeg tests generate a short 720p clip, produce renditions, decode each playlist, generate poster/preview assets, and process a silent small source.
 - The Docker stack test covers real services and the core API/media workflow. Consult the repository's current CI status; local build success alone does not prove Docker startup.
 - Flutter source is not claimed to have passed `flutter analyze` or device tests in an environment without Flutter.
 - A full browser automation/accessibility suite and a public HTTPS webhook receiver test remain outstanding.
