@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { crossedThresholds } from "../apps/worker/src/quota-notices.js";
+import { crossedThresholds } from "../apps/worker/src/quota-thresholds.js";
 
 test("quota thresholds are emitted only after crossing their levels", () => {
   assert.deepEqual(crossedThresholds(79, 100), []);
