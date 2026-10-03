@@ -1,0 +1,1 @@
+Quota administration is owner-editable for self-hosted deployments. Hosted plan entitlements should be authoritative in managed deployments.
