@@ -1,0 +1,1 @@
+CI should cover TypeScript, unit tests, media tests, build, Docker integration, and migration repeatability for the quota administration change.
