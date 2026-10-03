@@ -4,6 +4,33 @@ import { db, transaction } from "../../../packages/shared/src/db.js";
 import { opaque, hash } from "../../../packages/shared/src/security.js";
 import { actor, access, audit, ApiError, uuid } from "./context.js";
 import { sendWorkspaceInvite } from "./mail.js";
+
+const quotaSchema = z.object({
+  storageLimit: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  videoLimit: z.coerce.number().int().min(0).max(1_000_000),
+  uploadBytesMonthlyLimit: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(Number.MAX_SAFE_INTEGER),
+  outputStorageLimit: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(Number.MAX_SAFE_INTEGER),
+  processingSecondsMonthlyLimit: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(Number.MAX_SAFE_INTEGER),
+  liveConcurrencyLimit: z.coerce.number().int().min(0).max(10_000),
+  liveMinutesMonthlyLimit: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(Number.MAX_SAFE_INTEGER),
+});
+
 export async function workspaceRoutes(app: FastifyInstance) {
   app.get("/api/v1/workspaces", async (req) => {
     const a = await actor(req);
@@ -14,6 +41,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
       )
     ).rows;
   });
+
   app.post("/api/v1/workspaces", async (req, reply) => {
     const a = await actor(req);
     if (!a.userId) throw new ApiError(403, "USER_REQUIRED");
@@ -34,6 +62,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
       }),
     );
   });
+
   app.get<{ Params: { id: string } }>(
     "/api/v1/workspaces/:id/members",
     async (req) => {
@@ -46,6 +75,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
       ).rows;
     },
   );
+
   app.post<{ Params: { id: string } }>(
     "/api/v1/workspaces/:id/invites",
     async (req) => {
@@ -83,6 +113,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
       return { token, expiresIn: 604800, delivered: true };
     },
   );
+
   app.post("/api/v1/invites/accept", async (req) => {
     const a = await actor(req);
     const b = z.object({ token: z.string().max(200) }).parse(req.body);
@@ -100,6 +131,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
       return { workspaceId: i.workspace_id };
     });
   });
+
   app.patch<{ Params: { id: string; user: string } }>(
     "/api/v1/workspaces/:id/members/:user",
     async (req) => {
@@ -116,6 +148,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
       return { ok: true };
     },
   );
+
   app.post<{ Params: { id: string; user: string } }>(
     "/api/v1/workspaces/:id/members/:user/transfer-owner",
     async (req) => {
@@ -173,6 +206,41 @@ export async function workspaceRoutes(app: FastifyInstance) {
       return { ok: true };
     },
   );
+
+  app.put<{ Params: { id: string } }>(
+    "/api/v1/workspaces/:id/quotas",
+    async (req) => {
+      const a = await access(req, req.params.id, "owner");
+      const q = quotaSchema.parse(req.body);
+      const result = await db.query(
+        `UPDATE workspaces
+         SET storage_limit=$2,
+             video_limit=$3,
+             upload_bytes_monthly_limit=$4,
+             output_storage_limit=$5,
+             processing_seconds_monthly_limit=$6,
+             live_concurrency_limit=$7,
+             live_minutes_monthly_limit=$8
+         WHERE id=$1
+         RETURNING storage_limit,video_limit,upload_bytes_monthly_limit,
+                   output_storage_limit,processing_seconds_monthly_limit,
+                   live_concurrency_limit,live_minutes_monthly_limit`,
+        [
+          req.params.id,
+          q.storageLimit,
+          q.videoLimit,
+          q.uploadBytesMonthlyLimit,
+          q.outputStorageLimit,
+          q.processingSecondsMonthlyLimit,
+          q.liveConcurrencyLimit,
+          q.liveMinutesMonthlyLimit,
+        ],
+      );
+      await audit(req.params.id, a, "workspace.quotas_updated", req.params.id);
+      return result.rows[0];
+    },
+  );
+
   app.get<{ Params: { id: string } }>(
     "/api/v1/workspaces/:id/usage",
     async (req) => {
@@ -255,6 +323,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
       ).rows[0];
     },
   );
+
   for (const resource of ["notifications", "audit_logs"] as const)
     app.get<{ Params: { id: string } }>(
       `/api/v1/workspaces/:id/${resource}`,
