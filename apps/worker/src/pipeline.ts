@@ -11,6 +11,7 @@ import { enqueue, event } from "../../../packages/shared/src/events.js";
 import { config } from "../../../packages/config/src/index.js";
 import {
   probe,
+  profiles,
   transcode,
   thumbnails,
   validateHls,
@@ -78,6 +79,49 @@ async function recordOutputUsage(
     await c.query(
       "INSERT INTO usage_records(workspace_id,video_id,kind,amount,idempotency_key) VALUES($1,$2,'output_bytes',$3,$4)",
       [workspaceId, videoId, bytes, idempotencyKey],
+    );
+  });
+}
+
+async function reserveProcessingCompute(
+  workspaceId: string,
+  videoId: string,
+  metadata: Metadata,
+  idempotencyKey: string,
+) {
+  const encodeSeconds = Math.ceil(
+    metadata.duration * profiles(metadata.width, metadata.height).length,
+  );
+  await transaction(async (c) => {
+    const existing = await c.query(
+      "SELECT id FROM usage_records WHERE idempotency_key=$1",
+      [idempotencyKey],
+    );
+    if (existing.rowCount) return;
+    const workspace = (
+      await c.query(
+        "SELECT processing_seconds_monthly_limit FROM workspaces WHERE id=$1 FOR UPDATE",
+        [workspaceId],
+      )
+    ).rows[0];
+    const used = (
+      await c.query(
+        `SELECT coalesce(sum(amount),0) AS seconds
+         FROM usage_records
+         WHERE workspace_id=$1
+           AND kind='processing_seconds'
+           AND created_at>=date_trunc('month',now())`,
+        [workspaceId],
+      )
+    ).rows[0];
+    if (
+      Number(used.seconds) + encodeSeconds >
+      Number(workspace.processing_seconds_monthly_limit)
+    )
+      throw Error("PROCESSING_COMPUTE_QUOTA_EXCEEDED");
+    await c.query(
+      "INSERT INTO usage_records(workspace_id,video_id,kind,amount,idempotency_key) VALUES($1,$2,'processing_seconds',$3,$4)",
+      [workspaceId, videoId, encodeSeconds, idempotencyKey],
     );
   });
 }
@@ -170,6 +214,12 @@ export async function mediaJob(job: Job) {
         );
       });
     } else if (job.queueName === "video-transcode") {
+      await reserveProcessingCompute(
+        v.workspace_id,
+        videoId,
+        v.metadata as Metadata,
+        `${job.id}:processing`,
+      );
       await pipeline(
         await storage.get(v.source_key),
         createWriteStream(source),

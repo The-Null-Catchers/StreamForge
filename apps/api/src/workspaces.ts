@@ -184,6 +184,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
              w.video_limit,
              w.upload_bytes_monthly_limit,
              w.output_storage_limit,
+             w.processing_seconds_monthly_limit,
              w.live_concurrency_limit,
              w.live_minutes_monthly_limit,
              (
@@ -198,6 +199,13 @@ export async function workspaceRoutes(app: FastifyInstance) {
                WHERE workspace_id=w.id
                  AND deleted_at IS NULL
              )::bigint AS output_bytes,
+             (
+               SELECT coalesce(sum(amount),0)
+               FROM usage_records
+               WHERE workspace_id=w.id
+                 AND kind='processing_seconds'
+                 AND created_at>=date_trunc('month',now())
+             )::bigint AS processing_seconds_this_month,
              (
                SELECT count(*)
                FROM videos
