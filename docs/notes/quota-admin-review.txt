@@ -1,0 +1,1 @@
+Review checklist: owner-only mutation, limit validation, deduplicated threshold notices, monthly reset semantics, and no destructive behavior when lowering limits.
