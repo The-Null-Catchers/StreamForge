@@ -5,7 +5,9 @@ import { hash, opaque } from "../../../packages/shared/src/security.js";
 import { enqueue } from "../../../packages/shared/src/events.js";
 import { config } from "../../../packages/config/src/index.js";
 import { access, audit, uuid, ApiError } from "./context.js";
+import { workspaceAdminRoutes } from "./workspace-admin.js";
 export async function platformRoutes(app: FastifyInstance) {
+  await workspaceAdminRoutes(app);
   app.post("/api/v1/api-keys", async (req) => {
     const b = z
       .object({
