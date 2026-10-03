@@ -20,11 +20,13 @@ import { cleanupStaleTempDirs } from "./temp-janitor.js";
 import { reconcileDispatchedOutbox } from "./outbox-reconcile.js";
 import { workerQueueSelection } from "./worker-pools.js";
 import { reconcileOutputAccounting } from "./usage-reconcile.js";
+import { emitQuotaNotices } from "./quota-notices.js";
 const logger = pino();
 const workerId = randomUUID();
 let stopping = false;
 let dispatching = false;
 let lastUsageReconcile = 0;
+let lastQuotaNoticeScan = 0;
 const names: QueueName[] = workerQueueSelection(config.WORKER_QUEUES);
 logger.info(
   { workerId, queues: names, maintenance: config.WORKER_MAINTENANCE },
@@ -226,6 +228,12 @@ async function maintenance() {
           { correctedOutputRows },
           "corrected output usage accounting drift",
         );
+    }
+    if (Date.now() - lastQuotaNoticeScan >= 10 * 60 * 1000) {
+      const createdQuotaNotices = await emitQuotaNotices();
+      lastQuotaNoticeScan = Date.now();
+      if (createdQuotaNotices)
+        logger.info({ createdQuotaNotices }, "quota warning notices created");
     }
     const removedTempDirs = await cleanupStaleTempDirs();
     if (removedTempDirs)
