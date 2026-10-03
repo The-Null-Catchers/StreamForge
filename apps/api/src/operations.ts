@@ -74,13 +74,25 @@ export async function operationsRoutes(app: FastifyInstance) {
           db.query(
             `SELECT
                coalesce(sum(v.size),0)::bigint AS source_bytes,
+               coalesce(sum(v.output_bytes),0)::bigint AS output_bytes,
                count(v.id)::int AS videos,
+               coalesce(
+                 (SELECT sum(ur.amount)
+                  FROM usage_records ur
+                  JOIN videos uv ON uv.id=ur.video_id
+                  WHERE ur.workspace_id=$1
+                    AND ur.kind='output_bytes'
+                    AND uv.deleted_at IS NULL),
+                 0
+               )::bigint AS output_ledger_bytes,
                coalesce(
                  (SELECT sum(amount)
                   FROM usage_records
-                  WHERE workspace_id=$1 AND kind='output_bytes'),
+                  WHERE workspace_id=$1
+                    AND kind='processing_seconds'
+                    AND created_at>=date_trunc('month',now())),
                  0
-               )::bigint AS output_bytes,
+               )::bigint AS processing_seconds_this_month,
                coalesce(
                  (SELECT sum(amount)
                   FROM usage_records
@@ -95,6 +107,14 @@ export async function operationsRoutes(app: FastifyInstance) {
           ),
         ]);
 
+      const currentUsage = usage.rows[0] ?? {
+        source_bytes: 0,
+        output_bytes: 0,
+        output_ledger_bytes: 0,
+        processing_seconds_this_month: 0,
+        videos: 0,
+        finalized_live_seconds: 0,
+      };
       return {
         dependencies: {
           database,
@@ -108,11 +128,11 @@ export async function operationsRoutes(app: FastifyInstance) {
           processing: failedJobs.rows,
           webhooks: failedWebhooks.rows,
         },
-        usage: usage.rows[0] ?? {
-          source_bytes: 0,
-          output_bytes: 0,
-          videos: 0,
-          finalized_live_seconds: 0,
+        usage: currentUsage,
+        accounting: {
+          outputDriftBytes:
+            Number(currentUsage.output_bytes) -
+            Number(currentUsage.output_ledger_bytes),
         },
         generatedAt: new Date().toISOString(),
       };
