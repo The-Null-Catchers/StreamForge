@@ -108,13 +108,22 @@ const workers = names.map((name) => {
         job.data.videoId &&
         !["cleanup", "analytics", "ai", "live-import", "webhooks"].includes(name)
       ) {
+        const mediaErrorCode = [
+          "OUTPUT_STORAGE_QUOTA_EXCEEDED",
+          "CHECKSUM_MISMATCH",
+          "DURATION_LIMIT",
+          "OUTPUT_VERIFICATION_FAILED",
+          "OUTPUT_MISSING",
+        ].includes(String(error?.message))
+          ? String(error.message)
+          : "PROCESSING_FAILED";
         await c.query(
-          "UPDATE processing_jobs SET status='dead_letter',error_code='PROCESSING_FAILED' WHERE id=$1",
-          [job.id],
+          "UPDATE processing_jobs SET status='dead_letter',error_code=$2 WHERE id=$1",
+          [job.id, mediaErrorCode],
         );
         const v = await c.query(
-          "UPDATE videos SET status='failed',error_code='PROCESSING_FAILED' WHERE id=$1 AND deleted_at IS NULL AND status<>'ready' RETURNING workspace_id",
-          [job.data.videoId],
+          "UPDATE videos SET status='failed',error_code=$2 WHERE id=$1 AND deleted_at IS NULL AND status<>'ready' RETURNING workspace_id",
+          [job.data.videoId, mediaErrorCode],
         );
         if (v.rowCount) {
           await event(
@@ -128,7 +137,9 @@ const workers = names.map((name) => {
             [
               v.rows[0].workspace_id,
               job.data.videoId,
-              "Processing failed. Retry or inspect worker logs.",
+              mediaErrorCode === "OUTPUT_STORAGE_QUOTA_EXCEEDED"
+                ? "Processing stopped because the workspace output storage quota is full."
+                : "Processing failed. Retry or inspect worker logs.",
             ],
           );
         }
