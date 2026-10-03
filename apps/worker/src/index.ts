@@ -110,6 +110,7 @@ const workers = names.map((name) => {
       ) {
         const mediaErrorCode = [
           "OUTPUT_STORAGE_QUOTA_EXCEEDED",
+          "PROCESSING_COMPUTE_QUOTA_EXCEEDED",
           "CHECKSUM_MISMATCH",
           "DURATION_LIMIT",
           "OUTPUT_VERIFICATION_FAILED",
@@ -132,15 +133,15 @@ const workers = names.map((name) => {
             job.data.videoId,
             "video.processing.failed",
           );
+          const message =
+            mediaErrorCode === "OUTPUT_STORAGE_QUOTA_EXCEEDED"
+              ? "Processing stopped because the workspace output storage quota is full."
+              : mediaErrorCode === "PROCESSING_COMPUTE_QUOTA_EXCEEDED"
+                ? "Processing stopped because the workspace monthly processing quota is exhausted."
+                : "Processing failed. Retry or inspect worker logs.";
           await c.query(
             "INSERT INTO notifications(workspace_id,video_id,message) VALUES($1,$2,$3)",
-            [
-              v.rows[0].workspace_id,
-              job.data.videoId,
-              mediaErrorCode === "OUTPUT_STORAGE_QUOTA_EXCEEDED"
-                ? "Processing stopped because the workspace output storage quota is full."
-                : "Processing failed. Retry or inspect worker logs.",
-            ],
+            [v.rows[0].workspace_id, job.data.videoId, message],
           );
         }
       }
