@@ -1,1 +1,0 @@
-Final implementation details are captured in docs/quota-administration.md.

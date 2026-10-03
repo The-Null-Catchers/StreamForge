@@ -1,1 +1,0 @@
-CI status should be checked before merge.
