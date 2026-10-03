@@ -9,6 +9,8 @@ export type UploadSessionInfo = {
   chunkSize: number;
 };
 
+export type TranscodingProfile = "data_saver" | "balanced" | "quality";
+
 export async function fileHash(file: File, onProgress?: (pct: number) => void) {
   const h = await createSHA256();
   h.init();
@@ -28,6 +30,7 @@ export async function upload(
   onProgress: (bytes: number, speed: number) => void,
   onHash: (pct: number) => void,
   onSession?: (session: UploadSessionInfo) => void,
+  transcodingProfile: TranscodingProfile = "balanced",
 ) {
   const checksum = await fileHash(file, onHash);
   if (signal.aborted) return;
@@ -51,6 +54,7 @@ export async function upload(
       workspaceId,
       title: file.name.replace(/\.[^.]+$/, ""),
       privacy: "private",
+      transcodingProfile,
     });
     state = await post("/uploads", {
       workspaceId,
