@@ -3,6 +3,10 @@ import { z } from "zod";
 import { db, transaction } from "../../../packages/shared/src/db.js";
 import { enqueue, event } from "../../../packages/shared/src/events.js";
 import {
+  transcodingProfileInfo,
+  transcodingProfiles,
+} from "../../../packages/media-core/src/profiles.js";
+import {
   access,
   videoAccess,
   audit,
@@ -10,13 +14,25 @@ import {
   ApiError,
   actor,
 } from "./context.js";
+
+const transcodingProfileSchema = z.enum(transcodingProfiles);
+
 export async function videoRoutes(app: FastifyInstance) {
+  app.get("/api/v1/transcoding-profiles", async (req) => {
+    await actor(req);
+    return transcodingProfiles.map((id) => ({
+      id,
+      ...transcodingProfileInfo[id],
+    }));
+  });
+
   app.post("/api/v1/videos", async (req, reply) => {
     const b = z
       .object({
         workspaceId: uuid,
         title: z.string().trim().min(1).max(200),
         privacy: z.enum(["private", "unlisted", "public"]).default("private"),
+        transcodingProfile: transcodingProfileSchema.default("balanced"),
       })
       .parse(req.body);
     await access(req, b.workspaceId, "editor", "videos:write");
@@ -38,13 +54,14 @@ export async function videoRoutes(app: FastifyInstance) {
           throw new ApiError(409, "VIDEO_QUOTA_EXCEEDED");
         return (
           await c.query(
-            "INSERT INTO videos(workspace_id,title,privacy) VALUES($1,$2,$3) RETURNING *",
-            [b.workspaceId, b.title, b.privacy],
+            "INSERT INTO videos(workspace_id,title,privacy,transcoding_profile) VALUES($1,$2,$3,$4) RETURNING *",
+            [b.workspaceId, b.title, b.privacy, b.transcodingProfile],
           )
         ).rows[0];
       }),
     );
   });
+
   app.get("/api/v1/videos", async (req) => {
     const q = z
       .object({
@@ -84,6 +101,7 @@ export async function videoRoutes(app: FastifyInstance) {
       limit: q.limit,
     };
   });
+
   app.get<{ Params: { id: string } }>("/api/v1/videos/:id", async (req) => {
     const v = await videoAccess(req, req.params.id);
     return {
@@ -96,6 +114,7 @@ export async function videoRoutes(app: FastifyInstance) {
       ).rows,
     };
   });
+
   app.patch<{ Params: { id: string } }>("/api/v1/videos/:id", async (req) => {
     const v = await videoAccess(req, req.params.id, "editor", "videos:write");
     const b = z
@@ -114,6 +133,26 @@ export async function videoRoutes(app: FastifyInstance) {
     await audit(v.workspace_id, a, "video.updated", v.id);
     return { ok: true };
   });
+
+  app.put<{ Params: { id: string } }>(
+    "/api/v1/videos/:id/transcoding-profile",
+    async (req) => {
+      const v = await videoAccess(req, req.params.id, "editor", "videos:write");
+      const { profile } = z
+        .object({ profile: transcodingProfileSchema })
+        .parse(req.body);
+      const a = await access(req, v.workspace_id, "editor", "videos:write");
+      const updated = await db.query(
+        "UPDATE videos SET transcoding_profile=$1,updated_at=now() WHERE id=$2 AND status='queued' RETURNING transcoding_profile",
+        [profile, v.id],
+      );
+      if (!updated.rowCount)
+        throw new ApiError(409, "TRANSCODING_PROFILE_LOCKED");
+      await audit(v.workspace_id, a, "video.transcoding_profile_updated", v.id);
+      return { profile: updated.rows[0].transcoding_profile };
+    },
+  );
+
   app.put<{ Params: { id: string } }>(
     "/api/v1/videos/:id/embed-policy",
     async (req) => {
@@ -171,6 +210,7 @@ export async function videoRoutes(app: FastifyInstance) {
     await audit(v.workspace_id, a, "video.deleted", v.id);
     return { ok: true };
   });
+
   app.post<{ Params: { id: string } }>(
     "/api/v1/videos/:id/retry",
     async (req) => {
@@ -194,6 +234,7 @@ export async function videoRoutes(app: FastifyInstance) {
       return { ok: true };
     },
   );
+
   app.put<{ Params: { id: string } }>(
     "/api/v1/videos/:id/progress",
     async (req) => {
@@ -210,6 +251,7 @@ export async function videoRoutes(app: FastifyInstance) {
       return { ok: true };
     },
   );
+
   app.get<{ Params: { id: string } }>(
     "/api/v1/videos/:id/progress",
     async (req) => {
