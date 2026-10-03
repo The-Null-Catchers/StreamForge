@@ -11,12 +11,15 @@ import { enqueue, event } from "../../../packages/shared/src/events.js";
 import { config } from "../../../packages/config/src/index.js";
 import {
   probe,
-  profiles,
-  transcode,
   thumbnails,
   validateHls,
   type Metadata,
 } from "../../../packages/media-core/src/index.js";
+import { transcodeWithProfile } from "../../../packages/media-core/src/profile-transcode.js";
+import {
+  profileRenditions,
+  type TranscodingProfile,
+} from "../../../packages/media-core/src/profiles.js";
 
 async function uploadDirectory(local: string, prefix: string) {
   let bytes = 0;
@@ -87,10 +90,12 @@ async function reserveProcessingCompute(
   workspaceId: string,
   videoId: string,
   metadata: Metadata,
+  profile: TranscodingProfile,
   idempotencyKey: string,
 ) {
   const encodeSeconds = Math.ceil(
-    metadata.duration * profiles(metadata.width, metadata.height).length,
+    metadata.duration *
+      profileRenditions(metadata.width, metadata.height, profile).length,
   );
   await transaction(async (c) => {
     const existing = await c.query(
@@ -214,10 +219,12 @@ export async function mediaJob(job: Job) {
         );
       });
     } else if (job.queueName === "video-transcode") {
+      const profile = v.transcoding_profile as TranscodingProfile;
       await reserveProcessingCompute(
         v.workspace_id,
         videoId,
         v.metadata as Metadata,
+        profile,
         `${job.id}:processing`,
       );
       await pipeline(
@@ -226,10 +233,11 @@ export async function mediaJob(job: Job) {
       );
       let lastWrite = 0;
       let pending = Promise.resolve();
-      const variants = await transcode(
+      const variants = await transcodeWithProfile(
         source,
         output,
         v.metadata as Metadata,
+        profile,
         (name, pct) => {
           if (Date.now() - lastWrite > 1500 || pct === 100) {
             lastWrite = Date.now();
