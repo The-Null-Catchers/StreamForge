@@ -10,6 +10,17 @@ export type UploadSessionInfo = {
 };
 
 export type TranscodingProfile = "data_saver" | "balanced" | "quality";
+export type UploadMode = "direct" | "proxy";
+
+type DirectPart = { partNumber: number; etag: string; size: number };
+type DirectManifest = {
+  uploadId: string;
+  videoId: string;
+  checksum: string;
+  totalSize: number;
+  chunkSize: number;
+  parts: DirectPart[];
+};
 
 export async function fileHash(file: File, onProgress?: (pct: number) => void) {
   const h = await createSHA256();
@@ -21,6 +32,158 @@ export async function fileHash(file: File, onProgress?: (pct: number) => void) {
     );
   }
   return h.digest("hex");
+}
+
+function directKey(workspaceId: string, checksum: string) {
+  return `sf_direct_upload_${workspaceId}_${checksum}`;
+}
+
+function loadDirectManifest(key: string): DirectManifest | null {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? (JSON.parse(value) as DirectManifest) : null;
+  } catch {
+    localStorage.removeItem(key);
+    return null;
+  }
+}
+
+function saveDirectManifest(key: string, manifest: DirectManifest) {
+  localStorage.setItem(key, JSON.stringify(manifest));
+}
+
+export async function uploadDirect(
+  file: File,
+  workspaceId: string,
+  signal: AbortSignal,
+  onProgress: (bytes: number, speed: number) => void,
+  onHash: (pct: number) => void,
+  onSession?: (session: UploadSessionInfo) => void,
+  transcodingProfile: TranscodingProfile = "balanced",
+) {
+  const checksum = await fileHash(file, onHash);
+  if (signal.aborted) return;
+
+  const key = directKey(workspaceId, checksum);
+  let manifest = loadDirectManifest(key);
+  let state: any;
+  let resumed = false;
+
+  if (manifest) {
+    try {
+      state = await api(`/uploads/${manifest.uploadId}`);
+      if (
+        state.status !== "uploading" ||
+        state.upload_mode !== "direct" ||
+        Number(state.total_size) !== file.size
+      ) {
+        localStorage.removeItem(key);
+        manifest = null;
+      } else {
+        resumed = true;
+      }
+    } catch {
+      localStorage.removeItem(key);
+      manifest = null;
+    }
+  }
+
+  if (!manifest) {
+    const video = await post("/videos", {
+      workspaceId,
+      title: file.name.replace(/\.[^.]+$/, ""),
+      privacy: "private",
+      transcodingProfile,
+    });
+    state = await post("/uploads/direct", {
+      workspaceId,
+      videoId: video.id,
+      filename: file.name,
+      mimeType: file.type || "video/mp4",
+      totalSize: file.size,
+      checksum,
+    });
+    manifest = {
+      uploadId: state.id,
+      videoId: video.id,
+      checksum,
+      totalSize: file.size,
+      chunkSize: Number(state.chunk_size),
+      parts: [],
+    };
+    saveDirectManifest(key, manifest);
+  }
+
+  if (!state) state = await api(`/uploads/${manifest.uploadId}`);
+  const chunkSize = Number(state.chunk_size || manifest.chunkSize);
+  manifest.chunkSize = chunkSize;
+  const completedParts = new Map(manifest.parts.map((part) => [part.partNumber, part]));
+  let completed = manifest.parts.reduce((sum, part) => sum + part.size, 0);
+  const initial = completed;
+  const startedAt = performance.now();
+
+  onSession?.({
+    id: manifest.uploadId,
+    resumed,
+    uploadedBytes: completed,
+    totalSize: file.size,
+    chunkSize,
+  });
+  if (completed > 0) onProgress(completed, 0);
+
+  const partCount = Math.ceil(file.size / chunkSize);
+  for (let partNumber = 1; partNumber <= partCount; partNumber++) {
+    if (signal.aborted) return;
+    if (completedParts.has(partNumber)) continue;
+
+    const start = (partNumber - 1) * chunkSize;
+    const chunk = file.slice(start, Math.min(file.size, start + chunkSize));
+    const signed = await post(
+      `/uploads/${manifest.uploadId}/direct/parts/${partNumber}/sign`,
+      {},
+    );
+
+    let response: Response | null = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        response = await fetch(signed.url, {
+          method: "PUT",
+          body: chunk,
+          signal,
+        });
+        if (!response.ok) throw Error(`Storage upload failed (${response.status})`);
+        break;
+      } catch (error) {
+        if (signal.aborted) return;
+        if (attempt === 3) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** attempt));
+      }
+    }
+
+    const etag = response?.headers.get("etag");
+    if (!etag)
+      throw Error(
+        "Object storage must expose the ETag response header for direct browser uploads.",
+      );
+
+    const part = { partNumber, etag, size: chunk.size };
+    manifest.parts.push(part);
+    manifest.parts.sort((a, b) => a.partNumber - b.partNumber);
+    saveDirectManifest(key, manifest);
+    completed += chunk.size;
+    onProgress(
+      completed,
+      (completed - initial) /
+        Math.max(0.001, (performance.now() - startedAt) / 1000),
+    );
+  }
+
+  if (!signal.aborted) {
+    await post(`/uploads/${manifest.uploadId}/direct/complete`, {
+      parts: manifest.parts.map(({ partNumber, etag }) => ({ partNumber, etag })),
+    });
+    localStorage.removeItem(key);
+  }
 }
 
 export async function upload(
