@@ -283,7 +283,10 @@ export async function thumbnails(
     ],
     60000,
   );
-  const interval = Math.max(1, duration / 60);
+
+  const interval = Math.max(1, duration / 100);
+  const frameCount = Math.min(100, Math.max(1, Math.ceil(duration / interval)));
+  const spriteCount = Math.ceil(frameCount / 25);
   await run(
     "ffmpeg",
     [
@@ -298,27 +301,34 @@ export async function thumbnails(
       "-i",
       source,
       "-vf",
-      `fps=1/${interval},scale=240:-2`,
+      `fps=1/${interval},scale=240:135:force_original_aspect_ratio=decrease,pad=240:135:(ow-iw)/2:(oh-ih)/2,tile=5x5:nb_frames=25`,
       "-frames:v",
-      "60",
-      join(output, "%04d.jpg"),
+      String(spriteCount),
+      join(output, "sprite-%04d.jpg"),
     ],
     300000,
   );
-  const files = (await readdir(output))
-    .filter((x) => /^\d+\.jpg$/.test(x))
+
+  const sprites = (await readdir(output))
+    .filter((x) => /^sprite-\d{4}\.jpg$/.test(x))
     .sort();
+  if (!sprites.length) throw Error("THUMBNAIL_SPRITE_FAILED");
+
   const stamp = (s: number) =>
     new Date(Math.floor(s * 1000)).toISOString().slice(11, 23);
+  const cues: string[] = [];
+  for (let i = 0; i < frameCount; i++) {
+    const spriteIndex = Math.floor(i / 25);
+    const cell = i % 25;
+    const x = (cell % 5) * 240;
+    const y = Math.floor(cell / 5) * 135;
+    cues.push(
+      `${stamp(i * interval)} --> ${stamp(Math.min(duration, (i + 1) * interval))}\n${sprites[spriteIndex]}#xywh=${x},${y},240,135`,
+    );
+  }
   await writeFile(
     join(output, "previews.vtt"),
-    "WEBVTT\n\n" +
-      files
-        .map(
-          (f, i) =>
-            `${stamp(i * interval)} --> ${stamp(Math.min(duration, (i + 1) * interval))}\n${f}\n`,
-        )
-        .join("\n"),
+    "WEBVTT\n\n" + cues.join("\n\n") + "\n",
   );
 }
 export function subtitleVtt(input: string) {
