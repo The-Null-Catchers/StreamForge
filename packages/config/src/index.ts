@@ -25,6 +25,7 @@ const schema = z.object({
   MAX_UPLOAD_SIZE_GB: z.coerce.number().positive().default(20),
   MAX_VIDEO_DURATION_HOURS: z.coerce.number().positive().default(6),
   UPLOAD_TTL_HOURS: z.coerce.number().positive().default(48),
+  WORKSPACE_RESTORE_GRACE_DAYS: z.coerce.number().int().min(1).max(90).default(7),
   PLAYBACK_TTL_SECONDS: z.coerce
     .number()
     .int()
