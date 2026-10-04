@@ -6,8 +6,10 @@ import { enqueue } from "../../../packages/shared/src/events.js";
 import { config } from "../../../packages/config/src/index.js";
 import { access, audit, uuid, ApiError } from "./context.js";
 import { workspaceAdminRoutes } from "./workspace-admin.js";
+import { tusRoutes } from "./tus.js";
 export async function platformRoutes(app: FastifyInstance) {
   await workspaceAdminRoutes(app);
+  await tusRoutes(app);
   app.post("/api/v1/api-keys", async (req) => {
     const b = z
       .object({
@@ -85,7 +87,6 @@ export async function platformRoutes(app: FastifyInstance) {
       "INSERT INTO webhooks(workspace_id,url,secret) VALUES($1,$2,$3) RETURNING id,url",
       [b.workspaceId, b.url, secret],
     );
-    await audit(b.workspaceId, a, "webhook.created", r.rows[0].id);
     return { ...r.rows[0], secret };
   });
   app.get("/api/v1/webhooks", async (req) => {
