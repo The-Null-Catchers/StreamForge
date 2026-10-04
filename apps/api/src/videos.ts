@@ -69,11 +69,49 @@ export async function videoRoutes(app: FastifyInstance) {
         search: z.string().max(200).default(""),
         status: z.string().max(30).optional(),
         privacy: z.enum(["private", "unlisted", "public"]).optional(),
+        createdAfter: z.iso.datetime({ offset: true }).optional(),
+        createdBefore: z.iso.datetime({ offset: true }).optional(),
+        minDuration: z.coerce.number().min(0).max(86400).optional(),
+        maxDuration: z.coerce.number().min(0).max(86400).optional(),
+        minHeight: z.coerce.number().int().min(1).max(8192).optional(),
+        maxHeight: z.coerce.number().int().min(1).max(8192).optional(),
         limit: z.coerce.number().int().min(1).max(100).default(30),
         offset: z.coerce.number().int().min(0).max(100000).default(0),
         sort: z
           .enum(["latest", "oldest", "duration", "size"])
           .default("latest"),
+      })
+      .superRefine((value, ctx) => {
+        if (
+          value.minDuration !== undefined &&
+          value.maxDuration !== undefined &&
+          value.minDuration > value.maxDuration
+        )
+          ctx.addIssue({
+            code: "custom",
+            path: ["minDuration"],
+            message: "minDuration must not exceed maxDuration",
+          });
+        if (
+          value.minHeight !== undefined &&
+          value.maxHeight !== undefined &&
+          value.minHeight > value.maxHeight
+        )
+          ctx.addIssue({
+            code: "custom",
+            path: ["minHeight"],
+            message: "minHeight must not exceed maxHeight",
+          });
+        if (
+          value.createdAfter &&
+          value.createdBefore &&
+          new Date(value.createdAfter) > new Date(value.createdBefore)
+        )
+          ctx.addIssue({
+            code: "custom",
+            path: ["createdAfter"],
+            message: "createdAfter must not exceed createdBefore",
+          });
       })
       .parse(req.query);
     await access(req, q.workspaceId);
@@ -86,12 +124,32 @@ export async function videoRoutes(app: FastifyInstance) {
     return {
       items: (
         await db.query(
-          `SELECT * FROM videos WHERE workspace_id=$1 AND deleted_at IS NULL AND (title ILIKE $2 OR filename ILIKE $2 OR description ILIKE $2 OR array_to_string(tags, ' ') ILIKE $2) AND ($3::text IS NULL OR status=$3) AND ($4::text IS NULL OR privacy=$4) ORDER BY ${order} LIMIT $5 OFFSET $6`,
+          `SELECT *
+           FROM videos
+           WHERE workspace_id=$1
+             AND deleted_at IS NULL
+             AND (title ILIKE $2 OR filename ILIKE $2 OR description ILIKE $2 OR array_to_string(tags, ' ') ILIKE $2)
+             AND ($3::text IS NULL OR status=$3)
+             AND ($4::text IS NULL OR privacy=$4)
+             AND ($5::timestamptz IS NULL OR created_at >= $5)
+             AND ($6::timestamptz IS NULL OR created_at <= $6)
+             AND ($7::float8 IS NULL OR (metadata->>'duration')::float >= $7)
+             AND ($8::float8 IS NULL OR (metadata->>'duration')::float <= $8)
+             AND ($9::int IS NULL OR (metadata->>'height')::int >= $9)
+             AND ($10::int IS NULL OR (metadata->>'height')::int <= $10)
+           ORDER BY ${order}
+           LIMIT $11 OFFSET $12`,
           [
             q.workspaceId,
             `%${q.search}%`,
             q.status,
             q.privacy,
+            q.createdAfter ?? null,
+            q.createdBefore ?? null,
+            q.minDuration ?? null,
+            q.maxDuration ?? null,
+            q.minHeight ?? null,
+            q.maxHeight ?? null,
             q.limit,
             q.offset,
           ],
@@ -99,6 +157,18 @@ export async function videoRoutes(app: FastifyInstance) {
       ).rows,
       offset: q.offset,
       limit: q.limit,
+      filters: {
+        search: q.search,
+        status: q.status ?? null,
+        privacy: q.privacy ?? null,
+        createdAfter: q.createdAfter ?? null,
+        createdBefore: q.createdBefore ?? null,
+        minDuration: q.minDuration ?? null,
+        maxDuration: q.maxDuration ?? null,
+        minHeight: q.minHeight ?? null,
+        maxHeight: q.maxHeight ?? null,
+        sort: q.sort,
+      },
     };
   });
 
