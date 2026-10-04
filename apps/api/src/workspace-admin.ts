@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db, transaction } from "../../../packages/shared/src/db.js";
+import { enqueue } from "../../../packages/shared/src/events.js";
 import { access, audit, ApiError, uuid } from "./context.js";
 
 export async function workspaceAdminRoutes(app: FastifyInstance) {
@@ -43,16 +44,16 @@ export async function workspaceAdminRoutes(app: FastifyInstance) {
             "Type the exact workspace name to confirm deletion.",
           );
 
-        await c.query(
-          `UPDATE workspaces
-           SET deleted_at=now(),cleanup_pending=true,cleanup_completed_at=NULL
-           WHERE id=$1`,
+        const videos = await c.query(
+          `UPDATE videos
+           SET deleted_at=coalesce(deleted_at,now()),status='deleted'
+           WHERE workspace_id=$1
+           RETURNING id`,
           [req.params.id],
         );
-        await c.query(
-          "UPDATE videos SET deleted_at=coalesce(deleted_at,now()),status='deleted' WHERE workspace_id=$1",
-          [req.params.id],
-        );
+        for (const video of videos.rows)
+          await enqueue(c, "cleanup", { videoId: video.id });
+
         await c.query(
           "UPDATE api_keys SET revoked_at=coalesce(revoked_at,now()) WHERE workspace_id=$1",
           [req.params.id],
@@ -67,6 +68,12 @@ export async function workspaceAdminRoutes(app: FastifyInstance) {
           "INSERT INTO audit_logs(workspace_id,actor_id,action,target_id) VALUES($1,$2,'workspace.deletion_requested',$1)",
           [req.params.id, a.userId ?? a.keyId],
         );
+        await c.query("UPDATE workspaces SET deleted_at=now() WHERE id=$1", [
+          req.params.id,
+        ]);
+        await c.query("DELETE FROM workspace_members WHERE workspace_id=$1", [
+          req.params.id,
+        ]);
       });
 
       return reply.code(202).send({
