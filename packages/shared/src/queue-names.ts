@@ -2,6 +2,7 @@ export const queueNames = [
   "media-probe",
   "video-transcode",
   "thumbnail-generation",
+  "poster-generation",
   "hls-packaging",
   "subtitle-processing",
   "webhooks",
