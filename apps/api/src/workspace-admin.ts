@@ -127,9 +127,9 @@ export async function workspaceAdminRoutes(app: FastifyInstance) {
         await c.query(
           `UPDATE videos
            SET deleted_at=NULL,
-               status=coalesce(pre_delete_status,'draft'),
+               status=pre_delete_status,
                pre_delete_status=NULL
-           WHERE workspace_id=$1 AND deleted_at IS NOT NULL`,
+           WHERE workspace_id=$1 AND deleted_at IS NOT NULL AND pre_delete_status IS NOT NULL`,
           [req.params.id],
         );
         await c.query(
