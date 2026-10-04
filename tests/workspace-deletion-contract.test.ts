@@ -10,14 +10,25 @@ test("workspace deletion is owner-only and requires exact-name confirmation", as
   assert.match(source, /body\.confirmation !== workspace\.rows\[0\]\.name/);
 });
 
-test("workspace deletion revokes integrations and uses durable media cleanup", async () => {
+test("workspace deletion creates a restore window and revokes integrations", async () => {
   const source = await readFile("apps/api/src/workspace-admin.ts", "utf8");
+  assert.match(source, /pre_delete_status=status/);
+  assert.match(source, /WORKSPACE_RESTORE_GRACE_DAYS/);
+  assert.match(source, /restore_until=now\(\)\+\$2\*interval '1 day'/);
   assert.match(source, /UPDATE api_keys SET revoked_at/);
   assert.match(source, /UPDATE webhooks SET enabled=false/);
   assert.match(source, /DELETE FROM workspace_invites/);
-  assert.match(source, /enqueue\(c, "cleanup", \{ videoId: video\.id \}\)/);
-  assert.match(source, /DELETE FROM workspace_members/);
   assert.match(source, /workspace\.deletion_requested/);
+  assert.doesNotMatch(source, /DELETE FROM workspace_members WHERE workspace_id=\$1/);
+});
+
+test("owner can restore a workspace only inside the grace window", async () => {
+  const source = await readFile("apps/api/src/workspace-admin.ts", "utf8");
+  assert.match(source, /\/api\/v1\/workspaces\/:id\/restore/);
+  assert.match(source, /WORKSPACE_RESTORE_WINDOW_EXPIRED/);
+  assert.match(source, /membership\.rows\[0\]\.role !== "owner"/);
+  assert.match(source, /status=coalesce\(pre_delete_status,'draft'\)/);
+  assert.match(source, /workspace\.restored/);
 });
 
 test("deleted workspace access is blocked", async () => {
