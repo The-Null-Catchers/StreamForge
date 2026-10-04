@@ -27,8 +27,18 @@ test("owner can restore a workspace only inside the grace window", async () => {
   assert.match(source, /\/api\/v1\/workspaces\/:id\/restore/);
   assert.match(source, /WORKSPACE_RESTORE_WINDOW_EXPIRED/);
   assert.match(source, /membership\.rows\[0\]\.role !== "owner"/);
-  assert.match(source, /status=coalesce\(pre_delete_status,'draft'\)/);
+  assert.match(source, /status=pre_delete_status/);
+  assert.match(source, /pre_delete_status IS NOT NULL/);
   assert.match(source, /workspace\.restored/);
+});
+
+test("restore leaves videos deleted before workspace deletion untouched", async () => {
+  const source = await readFile("apps/api/src/workspace-admin.ts", "utf8");
+  assert.match(
+    source,
+    /WHERE workspace_id=\$1 AND deleted_at IS NOT NULL AND pre_delete_status IS NOT NULL/,
+  );
+  assert.doesNotMatch(source, /status=coalesce\(pre_delete_status,'draft'\)/);
 });
 
 test("deleted workspace access is blocked", async () => {
