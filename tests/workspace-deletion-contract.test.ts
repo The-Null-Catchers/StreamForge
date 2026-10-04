@@ -22,7 +22,8 @@ test("workspace deletion revokes integrations and uses durable media cleanup", a
 
 test("deleted workspace access is blocked", async () => {
   const source = await readFile("apps/api/src/context.ts", "utf8");
-  assert.match(source, /workspaces WHERE id=\$1 AND deleted_at IS NULL/);
+  assert.match(source, /SELECT deleted_at FROM workspaces WHERE id=\$1/);
+  assert.match(source, /workspaceState\.rows\[0\]\.deleted_at/);
   assert.match(source, /WORKSPACE_NOT_FOUND/);
 });
 
