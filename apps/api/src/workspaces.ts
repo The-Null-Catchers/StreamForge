@@ -36,7 +36,30 @@ export async function workspaceRoutes(app: FastifyInstance) {
     const a = await actor(req);
     return (
       await db.query(
-        "SELECT w.*,m.role FROM workspaces w JOIN workspace_members m ON m.workspace_id=w.id WHERE m.user_id=$1 ORDER BY w.created_at",
+        `SELECT w.*,m.role
+         FROM workspaces w
+         JOIN workspace_members m ON m.workspace_id=w.id
+         WHERE m.user_id=$1 AND w.deleted_at IS NULL
+         ORDER BY w.created_at`,
+        [a.userId],
+      )
+    ).rows;
+  });
+
+  app.get("/api/v1/workspaces/deleted", async (req) => {
+    const a = await actor(req);
+    if (!a.userId) throw new ApiError(403, "USER_REQUIRED");
+    return (
+      await db.query(
+        `SELECT w.id,w.name,w.deleted_at,w.restore_until,
+                (w.restore_until > now()) AS recoverable
+         FROM workspaces w
+         JOIN workspace_members m ON m.workspace_id=w.id
+         WHERE m.user_id=$1
+           AND m.role='owner'
+           AND w.deleted_at IS NOT NULL
+           AND w.purged_at IS NULL
+         ORDER BY w.restore_until ASC NULLS LAST`,
         [a.userId],
       )
     ).rows;
@@ -268,7 +291,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
                  AND deleted_at IS NULL
              )::bigint AS output_bytes,
              (
-               SELECT coalesce(sum(amount),0)
+               SELECT coalesce(sum(amount),0) AS seconds
                FROM usage_records
                WHERE workspace_id=w.id
                  AND kind='processing_seconds'

@@ -21,6 +21,7 @@ import { reconcileDispatchedOutbox } from "./outbox-reconcile.js";
 import { workerQueueSelection } from "./worker-pools.js";
 import { reconcileOutputAccounting } from "./usage-reconcile.js";
 import { emitQuotaNotices } from "./quota-notices.js";
+import { purgeExpiredWorkspaces } from "./workspace-retention.js";
 const logger = pino();
 const workerId = randomUUID();
 let stopping = false;
@@ -206,6 +207,9 @@ async function maintenance() {
         await enqueue(c, "cleanup", { videoId: u.video_id });
       }
     });
+    const purgedWorkspaces = await purgeExpiredWorkspaces();
+    if (purgedWorkspaces)
+      logger.info({ purgedWorkspaces }, "expired workspace restore windows purged");
     await syncLiveStreams();
     await db.query(
       "DELETE FROM analytics_events WHERE created_at<now()-interval '90 days'",

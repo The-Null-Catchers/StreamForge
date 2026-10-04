@@ -15,3 +15,16 @@ test("workspace settings UI exposes role-gated rename and invite management", as
   assert.match(source, /method: "DELETE"/);
   assert.match(source, /Invitation revoked/);
 });
+
+test("workspace settings UI lists recoverable tombstones and restores them", async () => {
+  const source = await readFile(
+    "apps/web/app/workspace-settings/page.tsx",
+    "utf8",
+  );
+
+  assert.match(source, /\/workspaces\/deleted/);
+  assert.match(source, /\/workspaces\/\$\{id\}\/restore/);
+  assert.match(source, /Recently deleted workspaces/);
+  assert.match(source, /Restore workspace/);
+  assert.match(source, /Revoked API keys and disabled webhooks stay inactive/);
+});

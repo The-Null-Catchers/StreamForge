@@ -5,6 +5,13 @@ import Link from "next/link";
 import { api, session } from "../../lib/api";
 
 type Workspace = { id: string; name: string; role: string };
+type DeletedWorkspace = {
+  id: string;
+  name: string;
+  deleted_at: string;
+  restore_until: string | null;
+  recoverable: boolean;
+};
 type Invite = {
   id: string;
   email: string;
@@ -15,6 +22,7 @@ type Invite = {
 
 export default function WorkspaceSettingsPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [deletedWorkspaces, setDeletedWorkspaces] = useState<DeletedWorkspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
   const [invites, setInvites] = useState<Invite[]>([]);
   const [notice, setNotice] = useState("");
@@ -28,6 +36,10 @@ export default function WorkspaceSettingsPage() {
   const canManageInvites = workspace?.role === "owner" || workspace?.role === "admin";
   const canRename = workspace?.role === "owner";
   const canDelete = workspace?.role === "owner";
+
+  async function loadDeletedWorkspaces() {
+    setDeletedWorkspaces(await api<DeletedWorkspace[]>("/workspaces/deleted"));
+  }
 
   async function loadInvites(id: string, role?: string) {
     if (!id || (role !== "owner" && role !== "admin")) {
@@ -50,7 +62,10 @@ export default function WorkspaceSettingsPage() {
         : rows[0]?.id ?? "";
     setWorkspaceId(nextId);
     const selected = rows.find((item) => item.id === nextId);
-    await loadInvites(nextId, selected?.role);
+    await Promise.all([
+      loadInvites(nextId, selected?.role),
+      loadDeletedWorkspaces(),
+    ]);
   }
 
   useEffect(() => {
@@ -107,6 +122,20 @@ export default function WorkspaceSettingsPage() {
     }
   }
 
+  async function restoreWorkspace(id: string) {
+    setBusy(true);
+    setNotice("");
+    try {
+      await api(`/workspaces/${id}/restore`, { method: "POST" });
+      await loadWorkspaces(id);
+      setNotice("Workspace restored. Revoked API keys and disabled webhooks stay inactive for safety.");
+    } catch (error) {
+      setNotice((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deleteWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspaceId || !workspace || !canDelete) return;
@@ -115,13 +144,17 @@ export default function WorkspaceSettingsPage() {
     setBusy(true);
     setNotice("");
     try {
-      await api(`/workspaces/${workspaceId}`, {
+      const result = await api<{ restoreUntil?: string }>(`/workspaces/${workspaceId}`, {
         method: "DELETE",
         body: JSON.stringify({ confirmation: deleteConfirmation }),
       });
       setDeleteConfirmation("");
       await loadWorkspaces();
-      setNotice("Workspace deletion scheduled. Media cleanup will continue in the background.");
+      setNotice(
+        result.restoreUntil
+          ? `Workspace deleted. You can restore it until ${new Date(result.restoreUntil).toLocaleString()}.`
+          : "Workspace deletion scheduled.",
+      );
     } catch (error) {
       setNotice((error as Error).message);
     } finally {
@@ -156,8 +189,41 @@ export default function WorkspaceSettingsPage() {
             ))}
           </select>
         </label>
+        {workspaces.length === 0 && <p>No active workspaces.</p>}
         {notice && <p>{notice}</p>}
       </section>
+
+      {deletedWorkspaces.length > 0 && (
+        <section className="panel">
+          <h2>Recently deleted workspaces</h2>
+          <p>
+            Owners can restore a workspace during its grace period. After the deadline,
+            retention maintenance permanently disables restore and schedules durable media cleanup.
+          </p>
+          <div className="settings-grid">
+            {deletedWorkspaces.map((item) => (
+              <div className="resource-row" key={item.id}>
+                <div>
+                  <strong>{item.name}</strong>
+                  <p>
+                    Deleted {new Date(item.deleted_at).toLocaleString()} · {item.recoverable && item.restore_until
+                      ? `Restore until ${new Date(item.restore_until).toLocaleString()}`
+                      : "Restore window expired"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => void restoreWorkspace(item.id)}
+                  disabled={busy || !item.recoverable}
+                >
+                  Restore workspace
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {workspace && (
         <section className="panel">
@@ -192,7 +258,9 @@ export default function WorkspaceSettingsPage() {
           accepted.
         </p>
 
-        {!canManageInvites ? (
+        {!workspace ? (
+          <p>Select an active workspace to manage invitations.</p>
+        ) : !canManageInvites ? (
           <p>You need admin access to manage pending invitations.</p>
         ) : invites.length === 0 ? (
           <p>No pending invitations.</p>
@@ -225,8 +293,8 @@ export default function WorkspaceSettingsPage() {
           <h2>Danger zone</h2>
           <p>
             Deleting a workspace immediately revokes access, API keys, webhooks,
-            and invitations. Existing media is tombstoned and durable cleanup jobs
-            remove stored objects asynchronously.
+            and invitations. Media remains recoverable during the restore grace period;
+            after that deadline durable cleanup removes stored objects asynchronously.
           </p>
           {!canDelete ? (
             <p>Only the workspace owner can delete this workspace.</p>
