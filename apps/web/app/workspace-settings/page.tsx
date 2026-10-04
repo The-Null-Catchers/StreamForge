@@ -19,6 +19,7 @@ export default function WorkspaceSettingsPage() {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
   const workspace = useMemo(
     () => workspaces.find((item) => item.id === workspaceId),
@@ -26,6 +27,7 @@ export default function WorkspaceSettingsPage() {
   );
   const canManageInvites = workspace?.role === "owner" || workspace?.role === "admin";
   const canRename = workspace?.role === "owner";
+  const canDelete = workspace?.role === "owner";
 
   async function loadInvites(id: string, role?: string) {
     if (!id || (role !== "owner" && role !== "admin")) {
@@ -60,6 +62,7 @@ export default function WorkspaceSettingsPage() {
   }, []);
 
   useEffect(() => {
+    setDeleteConfirmation("");
     if (!workspaceId) return;
     void loadInvites(workspaceId, workspace?.role);
   }, [workspaceId, workspace?.role]);
@@ -104,12 +107,34 @@ export default function WorkspaceSettingsPage() {
     }
   }
 
+  async function deleteWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspaceId || !workspace || !canDelete) return;
+    if (deleteConfirmation !== workspace.name) return;
+
+    setBusy(true);
+    setNotice("");
+    try {
+      await api(`/workspaces/${workspaceId}`, {
+        method: "DELETE",
+        body: JSON.stringify({ confirmation: deleteConfirmation }),
+      });
+      setDeleteConfirmation("");
+      await loadWorkspaces();
+      setNotice("Workspace deletion scheduled. Media cleanup will continue in the background.");
+    } catch (error) {
+      setNotice((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <main className="shell">
       <div className="topbar">
         <div>
           <strong>Workspace settings</strong>
-          <p>Manage workspace identity and pending invitations.</p>
+          <p>Manage workspace identity, invitations, and lifecycle.</p>
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <Link href="/quotas">Quotas</Link>
@@ -194,6 +219,38 @@ export default function WorkspaceSettingsPage() {
           </div>
         )}
       </section>
+
+      {workspace && (
+        <section className="panel">
+          <h2>Danger zone</h2>
+          <p>
+            Deleting a workspace immediately revokes access, API keys, webhooks,
+            and invitations. Existing media is tombstoned and durable cleanup jobs
+            remove stored objects asynchronously.
+          </p>
+          {!canDelete ? (
+            <p>Only the workspace owner can delete this workspace.</p>
+          ) : (
+            <form className="settings-grid" onSubmit={deleteWorkspace}>
+              <label>
+                Type <strong>{workspace.name}</strong> to confirm
+                <input
+                  value={deleteConfirmation}
+                  onChange={(event) => setDeleteConfirmation(event.target.value)}
+                  autoComplete="off"
+                  disabled={busy}
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={busy || deleteConfirmation !== workspace.name}
+              >
+                Delete workspace
+              </button>
+            </form>
+          )}
+        </section>
+      )}
     </main>
   );
 }
