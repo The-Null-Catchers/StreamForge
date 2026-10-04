@@ -7,10 +7,15 @@ import {
   HeadBucketCommand,
   ListObjectsV2Command,
   DeleteObjectsCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Readable } from "node:stream";
 import { config } from "../../config/src/index.js";
+
 export interface ObjectStorage {
   put(
     key: string,
@@ -23,6 +28,9 @@ export interface ObjectStorage {
   exists(key: string): Promise<boolean>;
   getSignedUrl(key: string, expires?: number): Promise<string>;
 }
+
+export type MultipartPart = { partNumber: number; etag: string };
+
 export class S3Storage implements ObjectStorage {
   client = new S3Client({
     endpoint: config.S3_ENDPOINT,
@@ -33,6 +41,7 @@ export class S3Storage implements ObjectStorage {
       secretAccessKey: config.S3_SECRET_KEY,
     },
   });
+
   async put(
     key: string,
     body: Buffer | Readable,
@@ -49,17 +58,20 @@ export class S3Storage implements ObjectStorage {
       }),
     );
   }
+
   async get(key: string) {
     const r = await this.client.send(
       new GetObjectCommand({ Bucket: config.S3_BUCKET, Key: key }),
     );
     return r.Body as Readable;
   }
+
   async delete(key: string) {
     await this.client.send(
       new DeleteObjectCommand({ Bucket: config.S3_BUCKET, Key: key }),
     );
   }
+
   async exists(key: string) {
     try {
       await this.client.send(
@@ -71,6 +83,14 @@ export class S3Storage implements ObjectStorage {
       throw e;
     }
   }
+
+  async size(key: string) {
+    const r = await this.client.send(
+      new HeadObjectCommand({ Bucket: config.S3_BUCKET, Key: key }),
+    );
+    return Number(r.ContentLength ?? 0);
+  }
+
   getSignedUrl(key: string, expires = 300) {
     return getSignedUrl(
       this.client,
@@ -78,9 +98,71 @@ export class S3Storage implements ObjectStorage {
       { expiresIn: expires },
     );
   }
+
+  async createMultipart(key: string, type: string) {
+    const r = await this.client.send(
+      new CreateMultipartUploadCommand({
+        Bucket: config.S3_BUCKET,
+        Key: key,
+        ContentType: type,
+      }),
+    );
+    if (!r.UploadId) throw Error("MULTIPART_CREATE_FAILED");
+    return r.UploadId;
+  }
+
+  signMultipartPart(
+    key: string,
+    uploadId: string,
+    partNumber: number,
+    expires = 900,
+  ) {
+    return getSignedUrl(
+      this.client,
+      new UploadPartCommand({
+        Bucket: config.S3_BUCKET,
+        Key: key,
+        UploadId: uploadId,
+        PartNumber: partNumber,
+      }),
+      { expiresIn: expires },
+    );
+  }
+
+  async completeMultipart(
+    key: string,
+    uploadId: string,
+    parts: MultipartPart[],
+  ) {
+    await this.client.send(
+      new CompleteMultipartUploadCommand({
+        Bucket: config.S3_BUCKET,
+        Key: key,
+        UploadId: uploadId,
+        MultipartUpload: {
+          Parts: parts.map((part) => ({
+            PartNumber: part.partNumber,
+            ETag: part.etag,
+          })),
+        },
+      }),
+    );
+  }
+
+  async abortMultipart(key: string, uploadId: string) {
+    await this.client.send(
+      new AbortMultipartUploadCommand({
+        Bucket: config.S3_BUCKET,
+        Key: key,
+        UploadId: uploadId,
+      }),
+    );
+  }
+
   async ready() {
     await this.client.send(new HeadBucketCommand({ Bucket: config.S3_BUCKET }));
   }
+
   async deletePrefix(prefix: string) {
     let token: string | undefined;
     do {
@@ -104,6 +186,7 @@ export class S3Storage implements ObjectStorage {
     } while (token);
   }
 }
+
 export const storage = new S3Storage();
 export const videoPrefix = (workspace: string, video: string) =>
   `workspaces/${workspace}/videos/${video}/`;
