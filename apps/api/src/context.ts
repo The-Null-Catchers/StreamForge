@@ -28,7 +28,12 @@ export async function actor(req: FastifyRequest): Promise<Actor> {
   if (!token) throw new ApiError(401, "AUTH_REQUIRED");
   if (token.startsWith("sf_live_") || token.startsWith("sf_test_")) {
     const r = await db.query(
-      "UPDATE api_keys SET last_used_at=now() WHERE key_hash=$1 AND revoked_at IS NULL RETURNING id,workspace_id,scopes",
+      `UPDATE api_keys k
+       SET last_used_at=now()
+       FROM workspaces w
+       WHERE k.key_hash=$1 AND k.revoked_at IS NULL
+         AND w.id=k.workspace_id AND w.deleted_at IS NULL
+       RETURNING k.id,k.workspace_id,k.scopes`,
       [hash(token)],
     );
     if (!r.rowCount) throw new ApiError(401, "INVALID_KEY");
@@ -61,6 +66,11 @@ export async function access(
 ) {
   uuid.parse(workspace);
   const a = await actor(req);
+  const activeWorkspace = await db.query(
+    "SELECT 1 FROM workspaces WHERE id=$1 AND deleted_at IS NULL",
+    [workspace],
+  );
+  if (!activeWorkspace.rowCount) throw new ApiError(404, "WORKSPACE_NOT_FOUND");
   if (a.keyId) {
     if (
       a.workspaceId !== workspace ||
