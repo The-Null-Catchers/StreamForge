@@ -66,11 +66,13 @@ export async function access(
 ) {
   uuid.parse(workspace);
   const a = await actor(req);
-  const activeWorkspace = await db.query(
-    "SELECT 1 FROM workspaces WHERE id=$1 AND deleted_at IS NULL",
+  const workspaceState = await db.query(
+    "SELECT deleted_at FROM workspaces WHERE id=$1",
     [workspace],
   );
-  if (!activeWorkspace.rowCount) throw new ApiError(404, "WORKSPACE_NOT_FOUND");
+  if (workspaceState.rowCount && workspaceState.rows[0].deleted_at)
+    throw new ApiError(404, "WORKSPACE_NOT_FOUND");
+  if (!workspaceState.rowCount) throw new ApiError(403, "FORBIDDEN");
   if (a.keyId) {
     if (
       a.workspaceId !== workspace ||
