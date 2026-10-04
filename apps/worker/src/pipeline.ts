@@ -15,6 +15,7 @@ import {
   validateHls,
   type Metadata,
 } from "../../../packages/media-core/src/index.js";
+import { posterFrame } from "../../../packages/media-core/src/poster.js";
 import { transcodeWithProfile } from "../../../packages/media-core/src/profile-transcode.js";
 import {
   profileRenditions,
@@ -86,6 +87,53 @@ async function recordOutputUsage(
   });
 }
 
+async function replacePosterObject(
+  workspaceId: string,
+  videoId: string,
+  key: string,
+  localPath: string,
+  newBytes: number,
+  idempotencyKey: string,
+) {
+  await transaction(async (c) => {
+    const existing = await c.query(
+      "SELECT id FROM usage_records WHERE idempotency_key=$1",
+      [idempotencyKey],
+    );
+    if (existing.rowCount) return;
+
+    const workspace = (
+      await c.query(
+        "SELECT output_storage_limit FROM workspaces WHERE id=$1 FOR UPDATE",
+        [workspaceId],
+      )
+    ).rows[0];
+    const oldBytes = (await storage.exists(key)) ? await storage.size(key) : 0;
+    const used = (
+      await c.query(
+        `SELECT coalesce(sum(output_bytes),0) AS bytes
+         FROM videos
+         WHERE workspace_id=$1 AND deleted_at IS NULL`,
+        [workspaceId],
+      )
+    ).rows[0];
+    const delta = newBytes - oldBytes;
+    if (Number(used.bytes) + delta > Number(workspace.output_storage_limit))
+      throw Error("OUTPUT_STORAGE_QUOTA_EXCEEDED");
+
+    await storage.put(key, createReadStream(localPath), "image/jpeg", newBytes);
+    if (!(await storage.exists(key))) throw Error("OUTPUT_VERIFICATION_FAILED");
+    await c.query(
+      "UPDATE videos SET output_bytes=greatest(0,output_bytes+$1),updated_at=now() WHERE id=$2 AND deleted_at IS NULL",
+      [delta, videoId],
+    );
+    await c.query(
+      "INSERT INTO usage_records(workspace_id,video_id,kind,amount,idempotency_key) VALUES($1,$2,'output_bytes',$3,$4)",
+      [workspaceId, videoId, delta, idempotencyKey],
+    );
+  });
+}
+
 async function reserveProcessingCompute(
   workspaceId: string,
   videoId: string,
@@ -147,7 +195,11 @@ export async function mediaJob(job: Job) {
       await storage.deletePrefix(videoPrefix(v.workspace_id, v.id));
       return;
     }
-    if (v.deleted_at || v.status === "ready") return;
+    if (
+      v.deleted_at ||
+      (v.status === "ready" && job.queueName !== "poster-generation")
+    )
+      return;
     const done = (
       await db.query("SELECT status FROM processing_jobs WHERE id=$1", [job.id])
     ).rows[0];
@@ -302,6 +354,43 @@ export async function mediaJob(job: Job) {
           [videoId],
         );
         await enqueue(c, "hls-packaging", { videoId });
+        await c.query(
+          "UPDATE processing_jobs SET status='complete' WHERE id=$1",
+          [job.id],
+        );
+      });
+    } else if (job.queueName === "poster-generation") {
+      const duration = Number(v.metadata?.duration);
+      const timeSeconds = Number(job.data.timeSeconds);
+      if (
+        v.status !== "ready" ||
+        !v.source_key ||
+        !v.output_prefix ||
+        !Number.isFinite(duration) ||
+        !Number.isFinite(timeSeconds) ||
+        timeSeconds < 0 ||
+        timeSeconds >= duration
+      )
+        throw Error("INVALID_POSTER_TIME");
+      await pipeline(
+        await storage.get(v.source_key),
+        createWriteStream(source),
+      );
+      const localPoster = await posterFrame(source, output, timeSeconds);
+      const bytes = (await stat(localPoster)).size;
+      const key = v.output_prefix + "thumbnails/poster.jpg";
+      await replacePosterObject(
+        v.workspace_id,
+        videoId,
+        key,
+        localPoster,
+        bytes,
+        `${job.id}:poster`,
+      );
+      await transaction(async (c) => {
+        await event(c, v.workspace_id, v.id, "video.poster.updated", {
+          timeSeconds,
+        });
         await c.query(
           "UPDATE processing_jobs SET status='complete' WHERE id=$1",
           [job.id],
