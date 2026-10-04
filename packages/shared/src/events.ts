@@ -11,6 +11,7 @@ export async function event(
   target: string,
   name: string,
   targetKey: "videoId" | "streamId" = "videoId",
+  extra: Record<string, unknown> = {},
 ) {
   const hooks = await c.query(
     "SELECT id FROM webhooks WHERE workspace_id=$1 AND enabled",
@@ -26,6 +27,7 @@ export async function event(
           event: name,
           [targetKey]: target,
           workspaceId: workspace,
+          ...extra,
         }),
       ],
     );
