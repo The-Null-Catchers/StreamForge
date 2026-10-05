@@ -16,7 +16,8 @@ test("sprite cells use fixed dimensions without FFmpeg padding overflow", async 
   const source = await readFile("packages/media-core/src/sprites.ts", "utf8");
   assert.match(source, /TILE_WIDTH = 240/);
   assert.match(source, /TILE_HEIGHT = 135/);
-  assert.match(source, /trunc\(/);
+  assert.match(source, /force_original_aspect_ratio=decrease/);
+  assert.match(source, /force_divisible_by=2/);
   assert.match(source, /setsar=1/);
   assert.match(source, /pad=\$\{TILE_WIDTH\}:\$\{TILE_HEIGHT\}/);
 });
