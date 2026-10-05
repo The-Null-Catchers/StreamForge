@@ -25,6 +25,11 @@ type PreviewCue = {
   width: number;
   height: number;
 };
+type PlayerAudioTrack = {
+  id: number;
+  name: string;
+  language: string;
+};
 export default function Player({
   videoId,
   sharedToken,
@@ -39,6 +44,8 @@ export default function Player({
   const [retry, setRetry] = useState(0);
   const [levels, setLevels] = useState<{ height: number }[]>([]);
   const [quality, setQuality] = useState(-1);
+  const [audioTracks, setAudioTracks] = useState<PlayerAudioTrack[]>([]);
+  const [audioTrack, setAudioTrack] = useState(-1);
   const [buffering, setBuffering] = useState(false);
   const [preview, setPreview] = useState<{
     cue: PreviewCue;
@@ -100,6 +107,10 @@ export default function Player({
     const loadStartedAt = performance.now();
     let startupSent = false;
     let disposed = false;
+    setLevels([]);
+    setQuality(-1);
+    setAudioTracks([]);
+    setAudioTrack(-1);
     const ua = navigator.userAgent.toLowerCase();
     const deviceType = /ipad|tablet/.test(ua)
       ? "tablet"
@@ -147,10 +158,29 @@ export default function Player({
     if (Hls.isSupported()) {
       const hls = new Hls();
       engine.current = hls;
+      const syncAudioTracks = () => {
+        const tracks = hls.audioTracks.map((track, id) => ({
+          id,
+          name: track.name || track.lang || `Track ${id + 1}`,
+          language: track.lang || "",
+        }));
+        setAudioTracks(tracks);
+        setAudioTrack(hls.audioTrack);
+      };
       hls.loadSource(data.url);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         setLevels(hls.levels.map((l) => ({ height: l.height })));
+        syncAudioTracks();
+      });
+      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, syncAudioTracks);
+      hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_event, detail) => {
+        setAudioTrack(detail.id);
+        const track = hls.audioTracks[detail.id];
+        send("audio_track_change", 0, {
+          audioTrack: track?.name || track?.lang || `Track ${detail.id + 1}`,
+          ...(track?.lang ? { audioLanguage: track.lang } : {}),
+        });
       });
       hls.on(Hls.Events.ERROR, (_e, d) => {
         if (d.fatal)
@@ -381,6 +411,29 @@ export default function Player({
             ))}
           </select>
         </label>
+        {audioTracks.length > 1 && (
+          <label>
+            Audio{" "}
+            <select
+              aria-label="Audio track"
+              value={audioTrack}
+              onChange={(e) => {
+                const value = Number(e.target.value);
+                setAudioTrack(value);
+                if (engine.current) engine.current.audioTrack = value;
+              }}
+            >
+              {audioTracks.map((track) => (
+                <option key={track.id} value={track.id}>
+                  {track.name}
+                  {track.language && track.name !== track.language
+                    ? ` (${track.language})`
+                    : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label>
           Speed{" "}
           <select
