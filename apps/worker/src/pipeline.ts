@@ -400,6 +400,8 @@ export async function mediaJob(job: Job) {
       for (const key of [
         "hls/master.m3u8",
         "thumbnails/poster.jpg",
+        "thumbnails/previews.vtt",
+        "thumbnails/0001.jpg",
         ...v.renditions.map(
           (r: { name: string }) => `hls/${r.name}/index.m3u8`,
         ),
