@@ -12,10 +12,28 @@ test("sprite generator emits compact WebVTT xywh previews", async () => {
   assert.match(source, /poster\.jpg/);
 });
 
-test("sprite cells use fixed dimensions for predictable player cropping", async () => {
+test("sprite cells use fixed dimensions without FFmpeg padding overflow", async () => {
   const source = await readFile("packages/media-core/src/sprites.ts", "utf8");
   assert.match(source, /TILE_WIDTH = 240/);
   assert.match(source, /TILE_HEIGHT = 135/);
   assert.match(source, /force_original_aspect_ratio=decrease/);
+  assert.match(source, /force_divisible_by=2/);
+  assert.match(source, /setsar=1/);
   assert.match(source, /pad=\$\{TILE_WIDTH\}:\$\{TILE_HEIGHT\}/);
+});
+
+test("production thumbnail stage delegates to the sprite generator", async () => {
+  const source = await readFile("packages/media-core/src/index.ts", "utf8");
+  assert.match(source, /await import\("\.\/sprites\.js"\)/);
+  assert.match(source, /return spriteThumbnails\(source, output, duration\)/);
+});
+
+test("web player signs sprite image requests and renders xywh crops", async () => {
+  const source = await readFile("apps/web/components/Player.tsx", "utf8");
+  assert.match(source, /searchParams\.get\("token"\)/);
+  assert.match(source, /searchParams\.set\("token", token\)/);
+  assert.match(source, /\^xywh=/);
+  assert.match(source, /backgroundPosition:/);
+  assert.match(source, /preview\.cue\.x/);
+  assert.match(source, /preview\.cue\.y/);
 });

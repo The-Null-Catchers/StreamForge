@@ -16,6 +16,15 @@ type Playback = {
     default: boolean;
   }[];
 };
+type PreviewCue = {
+  start: number;
+  end: number;
+  url: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 export default function Player({
   videoId,
   sharedToken,
@@ -32,10 +41,10 @@ export default function Player({
   const [quality, setQuality] = useState(-1);
   const [buffering, setBuffering] = useState(false);
   const [preview, setPreview] = useState<{
-    url: string;
+    cue: PreviewCue;
     position: number;
   } | null>(null);
-  const cues = useRef<{ start: number; end: number; url: string }[]>([]);
+  const cues = useRef<PreviewCue[]>([]);
   const resumeAt = useRef<number | null>(null);
   const parentOrigin = () => {
     if (!sharedToken || !document.referrer) return undefined;
@@ -210,7 +219,8 @@ export default function Player({
           }).catch(() => {});
       }
     }, 10000);
-    void fetch(data.previews)
+    const previewsUrl = new URL(data.previews, location.href);
+    void fetch(previewsUrl)
       .then((r) => r.text())
       .then((text) => {
         const seconds = (s: string) =>
@@ -223,14 +233,21 @@ export default function Player({
             const index = lines.findIndex((x) => x.includes(" --> "));
             if (index < 0 || !lines[index + 1]) return [];
             const [start, end] = lines[index].split(" --> ");
+            const rawTarget = lines[index + 1];
+            const [resource, fragment = ""] = rawTarget.split("#", 2);
+            const crop = /^xywh=(\d+),(\d+),(\d+),(\d+)$/.exec(fragment);
+            const imageUrl = new URL(resource, previewsUrl);
+            const token = previewsUrl.searchParams.get("token");
+            if (token) imageUrl.searchParams.set("token", token);
             return [
               {
                 start: seconds(start),
                 end: seconds(end),
-                url: new URL(
-                  lines[index + 1],
-                  new URL(data.previews, location.href),
-                ).toString(),
+                url: imageUrl.toString(),
+                x: crop ? Number(crop[1]) : 0,
+                y: crop ? Number(crop[2]) : 0,
+                width: crop ? Number(crop[3]) : 240,
+                height: crop ? Number(crop[4]) : 135,
               },
             ];
           });
@@ -311,7 +328,7 @@ export default function Player({
           const cue = cues.current.find(
             (c) => c.start <= p * v.duration && c.end > p * v.duration,
           );
-          setPreview(cue ? { url: cue.url, position: p } : null);
+          setPreview(cue ? { cue, position: p } : null);
         }}
         onClick={(e) => {
           const v = ref.current;
@@ -323,11 +340,23 @@ export default function Player({
         aria-label="Preview timeline"
       >
         {preview && (
-          <img
-            alt="Timeline preview"
-            src={preview.url}
+          <span
+            aria-label="Timeline preview"
+            role="img"
             style={{
+              position: "absolute",
+              bottom: "2rem",
               left: `${Math.min(85, Math.max(15, preview.position * 100))}%`,
+              width: `${preview.cue.width}px`,
+              height: `${preview.cue.height}px`,
+              transform: "translateX(-50%)",
+              backgroundImage: `url(${JSON.stringify(preview.cue.url)})`,
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: `-${preview.cue.x}px -${preview.cue.y}px`,
+              borderRadius: "8px",
+              boxShadow: "0 8px 24px rgba(0, 0, 0, 0.45)",
+              pointerEvents: "none",
+              zIndex: 2,
             }}
           />
         )}
