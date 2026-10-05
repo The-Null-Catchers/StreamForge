@@ -2,6 +2,10 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { run, type Metadata } from "./index.js";
 import {
+  audioMediaLines,
+  transcodeAudioTracks,
+} from "./audio.js";
+import {
   profileRenditions,
   type TranscodingProfile,
 } from "./profiles.js";
@@ -17,9 +21,6 @@ export async function transcodeWithProfile(
   for (const variant of variants) {
     const dir = join(output, variant.name);
     await mkdir(dir, { recursive: true });
-    const audio = metadata.hasAudio
-      ? ["-map", "0:a:0", "-c:a", "aac", "-b:a", "128k", "-ac", "2"]
-      : ["-an"];
     await run(
       "ffmpeg",
       [
@@ -36,7 +37,7 @@ export async function transcodeWithProfile(
         source,
         "-map",
         "0:v:0",
-        ...audio,
+        "-an",
         "-vf",
         `scale=${variant.width}:${variant.height},setsar=1`,
         "-c:v",
@@ -83,7 +84,15 @@ export async function transcodeWithProfile(
     onProgress?.(variant.name, 100);
   }
 
-  const master = ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-INDEPENDENT-SEGMENTS"];
+  const audioTracks = metadata.hasAudio
+    ? await transcodeAudioTracks(source, output, metadata)
+    : [];
+  const master = [
+    "#EXTM3U",
+    "#EXT-X-VERSION:3",
+    "#EXT-X-INDEPENDENT-SEGMENTS",
+    ...audioMediaLines(audioTracks),
+  ];
   for (const variant of variants) {
     const lines = (
       await readFile(join(output, variant.name, "index.m3u8"), "utf8")
@@ -120,8 +129,11 @@ export async function transcodeWithProfile(
       (item: { codec_type: string }) => item.codec_type === "video",
     );
     const codec = `avc1.6400${Number(stream.level).toString(16).padStart(2, "0")}`;
+    const audioAttributes = audioTracks.length
+      ? ',AUDIO="audio"'
+      : "";
     master.push(
-      `#EXT-X-STREAM-INF:BANDWIDTH=${Math.ceil(peak)},AVERAGE-BANDWIDTH=${Math.ceil((totalBytes * 8) / totalDuration)},RESOLUTION=${variant.width}x${variant.height},CODECS="${codec}${metadata.hasAudio ? ",mp4a.40.2" : ""}"`,
+      `#EXT-X-STREAM-INF:BANDWIDTH=${Math.ceil(peak)},AVERAGE-BANDWIDTH=${Math.ceil((totalBytes * 8) / totalDuration)},RESOLUTION=${variant.width}x${variant.height},CODECS="${codec}${audioTracks.length ? ",mp4a.40.2" : ""}"${audioAttributes}`,
       `${variant.name}/index.m3u8`,
     );
   }

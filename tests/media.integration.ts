@@ -10,6 +10,8 @@ import {
   thumbnails,
   validateHls,
 } from "../packages/media-core/src/index.js";
+import { transcodeWithProfile } from "../packages/media-core/src/profile-transcode.js";
+
 test(
   "real FFmpeg produces playable ABR HLS, poster and thumbnail index",
   { timeout: 180000 },
@@ -75,6 +77,85 @@ test(
     }
   },
 );
+
+test(
+  "production transcoder preserves multiple audio tracks as HLS alternatives",
+  { timeout: 120000 },
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "sf-audio-"));
+    try {
+      const source = join(dir, "source.mkv");
+      await run("ffmpeg", [
+        "-v",
+        "error",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=640x360:rate=24",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:sample_rate=48000",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=880:sample_rate=48000",
+        "-t",
+        "1",
+        "-map",
+        "0:v:0",
+        "-map",
+        "1:a:0",
+        "-map",
+        "2:a:0",
+        "-metadata:s:a:0",
+        "language=eng",
+        "-metadata:s:a:0",
+        "title=English",
+        "-metadata:s:a:1",
+        "language=ara",
+        "-metadata:s:a:1",
+        "title=Arabic",
+        "-disposition:a:0",
+        "default",
+        "-c:v",
+        "libx264",
+        "-threads",
+        "2",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        source,
+      ]);
+      const metadata = await probe(source);
+      const out = join(dir, "hls");
+      await mkdir(out);
+      const variants = await transcodeWithProfile(
+        source,
+        out,
+        metadata,
+        "data_saver",
+      );
+      assert.equal(variants.length, 1);
+      const master = await readFile(join(out, "master.m3u8"), "utf8");
+      assert.match(master, /TYPE=AUDIO,GROUP-ID="audio",NAME="English",LANGUAGE="eng",DEFAULT=YES/);
+      assert.match(master, /TYPE=AUDIO,GROUP-ID="audio",NAME="Arabic",LANGUAGE="ara",DEFAULT=NO/);
+      assert.match(master, /AUDIO="audio"/);
+      assert.ok((await stat(join(out, "audio", "track-1", "index.m3u8"))).size > 0);
+      assert.ok((await stat(join(out, "audio", "track-2", "index.m3u8"))).size > 0);
+      await run(
+        "ffmpeg",
+        ["-v", "error", "-i", join(out, "master.m3u8"), "-f", "null", "-"],
+        30000,
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+);
+
 test(
   "silent small source keeps a single non-upscaled rendition",
   { timeout: 60000 },
