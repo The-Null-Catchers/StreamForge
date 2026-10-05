@@ -23,6 +23,7 @@
     "build": "tsc && npm run build -w apps/web",
     "dev": "npm run dev -w apps/web",
     "storage:init": "node --import tsx infra/scripts/init-storage.ts",
+    "media:sprites": "node --import tsx infra/scripts/generate-sprites.ts",
     "openapi:validate": "node --import tsx infra/scripts/validate-openapi.ts",
     "sdk:build": "npm run build -w @streamforge/sdk",
     "sdk:pack": "npm pack -w @streamforge/sdk --dry-run"
