@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, writeFile, readFile, readdir, stat } from "node:fs/promises";
+import { mkdir, writeFile, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 export type Rendition = {
   height: number;
@@ -259,67 +259,8 @@ export async function thumbnails(
   output: string,
   duration: number,
 ) {
-  await mkdir(output, { recursive: true });
-  await run(
-    "ffmpeg",
-    [
-      "-v",
-      "error",
-      "-nostdin",
-      "-y",
-      "-protocol_whitelist",
-      "file",
-      "-format_whitelist",
-      "mov,matroska,webm",
-      "-ss",
-      String(Math.min(duration / 4, 5)),
-      "-i",
-      source,
-      "-frames:v",
-      "1",
-      "-vf",
-      "scale='min(1280,iw)':-2",
-      join(output, "poster.jpg"),
-    ],
-    60000,
-  );
-  const interval = Math.max(1, duration / 60);
-  await run(
-    "ffmpeg",
-    [
-      "-v",
-      "error",
-      "-nostdin",
-      "-y",
-      "-protocol_whitelist",
-      "file",
-      "-format_whitelist",
-      "mov,matroska,webm",
-      "-i",
-      source,
-      "-vf",
-      `fps=1/${interval},scale=240:-2`,
-      "-frames:v",
-      "60",
-      join(output, "%04d.jpg"),
-    ],
-    300000,
-  );
-  const files = (await readdir(output))
-    .filter((x) => /^\d+\.jpg$/.test(x))
-    .sort();
-  const stamp = (s: number) =>
-    new Date(Math.floor(s * 1000)).toISOString().slice(11, 23);
-  await writeFile(
-    join(output, "previews.vtt"),
-    "WEBVTT\n\n" +
-      files
-        .map(
-          (f, i) =>
-            `${stamp(i * interval)} --> ${stamp(Math.min(duration, (i + 1) * interval))}\n${f}\n`,
-        )
-        .join("\n"),
-  );
+  const { spriteThumbnails } = await import("./sprites.js");
+  return spriteThumbnails(source, output, duration);
 }
 export function subtitleVtt(input: string) {
   const text = input.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
