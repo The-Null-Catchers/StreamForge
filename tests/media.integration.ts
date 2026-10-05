@@ -79,8 +79,8 @@ test(
 );
 
 test(
-  "production transcoder preserves multiple audio tracks as HLS alternatives",
-  { timeout: 120000 },
+  "production transcoder preserves multiple audio tracks and emits CMAF fMP4",
+  { timeout: 180000 },
   async () => {
     const dir = await mkdtemp(join(tmpdir(), "sf-audio-"));
     try {
@@ -148,6 +148,31 @@ test(
       await run(
         "ffmpeg",
         ["-v", "error", "-i", join(out, "master.m3u8"), "-f", "null", "-"],
+        30000,
+      );
+
+      const cmafMaster = await readFile(join(out, "cmaf", "master.m3u8"), "utf8");
+      assert.match(cmafMaster, /#EXT-X-VERSION:7/);
+      const videoPlaylist = await readFile(
+        join(out, "cmaf", "360p", "index.m3u8"),
+        "utf8",
+      );
+      assert.match(videoPlaylist, /#EXT-X-MAP:URI="init\.mp4"/);
+      assert.match(videoPlaylist, /segment-\d+\.m4s/);
+      assert.ok((await stat(join(out, "cmaf", "360p", "init.mp4"))).size > 0);
+      assert.ok((await stat(join(out, "cmaf", "audio", "track-1", "init.mp4"))).size > 0);
+      assert.ok((await stat(join(out, "cmaf", "audio", "track-2", "init.mp4"))).size > 0);
+      await run(
+        "ffmpeg",
+        [
+          "-v",
+          "error",
+          "-i",
+          join(out, "cmaf", "master.m3u8"),
+          "-f",
+          "null",
+          "-",
+        ],
         30000,
       );
     } finally {
