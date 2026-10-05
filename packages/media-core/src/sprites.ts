@@ -48,7 +48,8 @@ export async function spriteThumbnails(
   const frameCount = Math.max(1, Math.min(MAX_FRAMES, Math.ceil(duration / interval)));
   const filter = [
     `fps=1/${interval}`,
-    `scale=${TILE_WIDTH}:${TILE_HEIGHT}:force_original_aspect_ratio=decrease`,
+    `scale=w='if(gt(a,${TILE_WIDTH}/${TILE_HEIGHT}),${TILE_WIDTH},trunc(${TILE_HEIGHT}*a))':h='if(gt(a,${TILE_WIDTH}/${TILE_HEIGHT}),trunc(${TILE_WIDTH}/a),${TILE_HEIGHT})'`,
+    "setsar=1",
     `pad=${TILE_WIDTH}:${TILE_HEIGHT}:(ow-iw)/2:(oh-ih)/2`,
     `tile=${COLUMNS}x${ROWS}`,
   ].join(",");
