@@ -1,10 +1,8 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { run, type Metadata } from "./index.js";
-import {
-  audioMediaLines,
-  transcodeAudioTracks,
-} from "./audio.js";
+import { audioMediaLines, transcodeAudioTracks } from "./audio.js";
+import { packageCmafFromHls } from "./cmaf.js";
 import {
   profileRenditions,
   type TranscodingProfile,
@@ -129,14 +127,13 @@ export async function transcodeWithProfile(
       (item: { codec_type: string }) => item.codec_type === "video",
     );
     const codec = `avc1.6400${Number(stream.level).toString(16).padStart(2, "0")}`;
-    const audioAttributes = audioTracks.length
-      ? ',AUDIO="audio"'
-      : "";
+    const audioAttributes = audioTracks.length ? ',AUDIO="audio"' : "";
     master.push(
       `#EXT-X-STREAM-INF:BANDWIDTH=${Math.ceil(peak)},AVERAGE-BANDWIDTH=${Math.ceil((totalBytes * 8) / totalDuration)},RESOLUTION=${variant.width}x${variant.height},CODECS="${codec}${audioTracks.length ? ",mp4a.40.2" : ""}"${audioAttributes}`,
       `${variant.name}/index.m3u8`,
     );
   }
   await writeFile(join(output, "master.m3u8"), master.join("\n") + "\n");
+  await packageCmafFromHls(output, variants, audioTracks);
   return variants;
 }
