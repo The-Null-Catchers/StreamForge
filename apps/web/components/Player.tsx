@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, post } from "../lib/api";
 type Playback = {
   url: string;
+  cmafUrl: string;
   token: string;
   expiresIn: number;
   poster: string;
@@ -167,7 +168,7 @@ export default function Player({
         setAudioTracks(tracks);
         setAudioTrack(hls.audioTrack);
       };
-      hls.loadSource(data.url);
+      hls.loadSource(data.cmafUrl || data.url);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         setLevels(hls.levels.map((l) => ({ height: l.height })));
