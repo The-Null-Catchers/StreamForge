@@ -39,6 +39,16 @@ function assertEmbedOrigin(video: any, value?: string) {
   return origin;
 }
 
+function signPlaylistLine(line: string, suffix: string) {
+  if (!line) return line;
+  if (!line.startsWith("#"))
+    return /\.(ts|m3u8|jpg|m4s|mp4)$/.test(line) ? line + suffix : line;
+  return line.replace(
+    /URI="([^"]+\.(?:m3u8|mp4|m4s|ts|jpg))"/g,
+    (_match, uri: string) => `URI="${uri}${suffix}"`,
+  );
+}
+
 async function embedBootstrapClaims(token: string) {
   try {
     return (
@@ -89,6 +99,7 @@ async function playbackPayload(
     sessionId,
     expiresIn: config.PLAYBACK_TTL_SECONDS,
     url: base + "hls/master.m3u8" + suffix,
+    cmafUrl: base + "hls/cmaf/master.m3u8" + suffix,
     poster: base + "thumbnails/poster.jpg" + suffix,
     previews: base + "thumbnails/previews.vtt" + suffix,
     subtitles: (
@@ -220,7 +231,7 @@ export async function playbackRoutes(app: FastifyInstance) {
       throw new ApiError(404, "VIDEO_UNAVAILABLE");
     const path = req.params["*"];
     if (
-      !/^(hls\/(master\.m3u8|\d+p\/(index\.m3u8|segment-\d+\.ts))|thumbnails\/(poster\.jpg|\d{4}\.jpg|previews\.vtt)|subtitles\/[a-f0-9-]{36}\.vtt)$/.test(
+      !/^(hls\/(master\.m3u8|\d+p\/(index\.m3u8|segment-\d+\.ts)|audio\/track-\d+\/(index\.m3u8|segment-\d+\.ts)|cmaf\/(master\.m3u8|\d+p\/(index\.m3u8|init\.mp4|segment-\d+\.m4s)|audio\/track-\d+\/(index\.m3u8|init\.mp4|segment-\d+\.m4s)))|thumbnails\/(poster\.jpg|\d{4}\.jpg|previews\.vtt)|subtitles\/[a-f0-9-]{36}\.vtt)$/.test(
         path,
       )
     )
@@ -246,11 +257,7 @@ export async function playbackRoutes(app: FastifyInstance) {
       const suffix = `?token=${encodeURIComponent(req.query.token)}`;
       text = text
         .split("\n")
-        .map((line) =>
-          line && !line.startsWith("#") && /\.(ts|m3u8|jpg)$/.test(line)
-            ? line + suffix
-            : line,
-        )
+        .map((line) => signPlaylistLine(line, suffix))
         .join("\n");
       return reply
         .type(
@@ -262,9 +269,13 @@ export async function playbackRoutes(app: FastifyInstance) {
       .type(
         path.endsWith(".ts")
           ? "video/mp2t"
-          : path.endsWith(".vtt")
-            ? "text/vtt"
-            : "image/jpeg",
+          : path.endsWith(".m4s")
+            ? "video/iso.segment"
+            : path.endsWith(".mp4")
+              ? "video/mp4"
+              : path.endsWith(".vtt")
+                ? "text/vtt"
+                : "image/jpeg",
       )
       .send(stream);
   });
@@ -330,6 +341,7 @@ export async function playbackRoutes(app: FastifyInstance) {
           "buffer_end",
           "quality_change",
           "subtitle_change",
+          "audio_track_change",
           "ended",
           "error",
           "heartbeat",
