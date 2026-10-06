@@ -9,6 +9,8 @@ async function packagePlaylist(
   stream: "video" | "audio",
 ) {
   await mkdir(outputDir, { recursive: true });
+  const copyFilters =
+    stream === "audio" ? ["-bsf:a", "aac_adtstoasc"] : [];
   await run(
     "ffmpeg",
     [
@@ -28,6 +30,7 @@ async function packagePlaylist(
       stream === "video" ? "-an" : "-vn",
       "-c",
       "copy",
+      ...copyFilters,
       "-f",
       "hls",
       "-hls_time",
