@@ -1,8 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { db, transaction } from "../../../packages/shared/src/db.js";
 import { storage } from "../../../packages/shared/src/storage.js";
+import {
+  scanReadyVideoMediaHealth,
+  type MediaHealthCursor,
+} from "./media-health.js";
 
 let objectStoreCursor: string | null = null;
+let mediaHealthCursor: MediaHealthCursor = null;
 
 export async function reconcileOutputAccounting() {
   const result = await db.query(
@@ -26,6 +31,8 @@ export async function reconcileOutputAccounting() {
   const ledgerCorrected = Number(result.rows[0]?.corrected ?? 0);
   const objectStore = await reconcileObjectStoreOutputUsage(objectStoreCursor);
   objectStoreCursor = objectStore.nextCursor;
+  const mediaHealth = await scanReadyVideoMediaHealth(mediaHealthCursor);
+  mediaHealthCursor = mediaHealth.cursor;
   return ledgerCorrected + objectStore.corrected;
 }
 
