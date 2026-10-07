@@ -22,6 +22,30 @@ import {
   type TranscodingProfile,
 } from "../../../packages/media-core/src/profiles.js";
 
+function mediaContentType(file: string, name: string) {
+  const audioAsset = file.split(/[\\/]/).includes("audio");
+  if (name.endsWith(".m3u8")) return "application/vnd.apple.mpegurl";
+  if (name.endsWith(".ts")) return "video/mp2t";
+  if (name.endsWith(".vtt")) return "text/vtt";
+  if (name.endsWith(".mp4")) return audioAsset ? "audio/mp4" : "video/mp4";
+  if (name.endsWith(".m4s"))
+    return audioAsset ? "audio/iso.segment" : "video/iso.segment";
+  if (name.endsWith(".jpg")) return "image/jpeg";
+  return "application/octet-stream";
+}
+
+function sourceAudioTrackCount(metadata: unknown) {
+  const streams = (metadata as { raw?: { streams?: unknown[] } } | undefined)
+    ?.raw?.streams;
+  if (!Array.isArray(streams)) return 0;
+  return streams.filter(
+    (stream) =>
+      typeof stream === "object" &&
+      stream !== null &&
+      (stream as { codec_type?: string }).codec_type === "audio",
+  ).length;
+}
+
 async function uploadDirectory(local: string, prefix: string) {
   let bytes = 0;
   for (const name of await readdir(local)) {
@@ -30,13 +54,7 @@ async function uploadDirectory(local: string, prefix: string) {
     if (s.isDirectory())
       bytes += await uploadDirectory(file, `${prefix}${name}/`);
     else {
-      const type = name.endsWith(".m3u8")
-        ? "application/vnd.apple.mpegurl"
-        : name.endsWith(".ts")
-          ? "video/mp2t"
-          : name.endsWith(".vtt")
-            ? "text/vtt"
-            : "image/jpeg";
+      const type = mediaContentType(file, name);
       await storage.put(prefix + name, createReadStream(file), type, s.size);
       if (!(await storage.exists(prefix + name)))
         throw Error("OUTPUT_VERIFICATION_FAILED");
@@ -397,15 +415,29 @@ export async function mediaJob(job: Job) {
         );
       });
     } else if (job.queueName === "hls-packaging") {
-      for (const key of [
+      const required = [
         "hls/master.m3u8",
+        "hls/cmaf/master.m3u8",
         "thumbnails/poster.jpg",
         "thumbnails/previews.vtt",
         "thumbnails/0001.jpg",
-        ...v.renditions.map(
-          (r: { name: string }) => `hls/${r.name}/index.m3u8`,
-        ),
-      ])
+        ...v.renditions.flatMap((r: { name: string }) => [
+          `hls/${r.name}/index.m3u8`,
+          `hls/cmaf/${r.name}/index.m3u8`,
+          `hls/cmaf/${r.name}/init.mp4`,
+          `hls/cmaf/${r.name}/segment-00000.m4s`,
+        ]),
+      ];
+      const audioTrackCount = sourceAudioTrackCount(v.metadata);
+      for (let ordinal = 1; ordinal <= audioTrackCount; ordinal++)
+        required.push(
+          `hls/audio/track-${ordinal}/index.m3u8`,
+          `hls/audio/track-${ordinal}/segment-00000.ts`,
+          `hls/cmaf/audio/track-${ordinal}/index.m3u8`,
+          `hls/cmaf/audio/track-${ordinal}/init.mp4`,
+          `hls/cmaf/audio/track-${ordinal}/segment-00000.m4s`,
+        );
+      for (const key of required)
         if (!(await storage.exists(v.output_prefix + key)))
           throw Error("OUTPUT_MISSING");
       await transaction(async (c) => {
