@@ -46,6 +46,54 @@ function sourceAudioTrackCount(metadata: unknown) {
   ).length;
 }
 
+async function storageText(key: string) {
+  const stream = await storage.get(key);
+  let text = "";
+  for await (const chunk of stream) text += chunk.toString();
+  return text;
+}
+
+async function verifyStoredMediaPlaylist(
+  playlistKey: string,
+  segmentExtension: ".ts" | ".m4s",
+) {
+  const text = await storageText(playlistKey);
+  if (!text.startsWith("#EXTM3U") || !text.includes("#EXT-X-ENDLIST"))
+    throw Error("OUTPUT_VERIFICATION_FAILED");
+  if (segmentExtension === ".m4s" && !text.includes("#EXT-X-MAP:"))
+    throw Error("OUTPUT_VERIFICATION_FAILED");
+
+  const references = new Set<string>();
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (!line.startsWith("#")) references.add(line);
+    for (const match of line.matchAll(/URI="([^"]+)"/g)) references.add(match[1]);
+  }
+
+  const mediaSegments = [...references].filter((ref) =>
+    ref.split(/[?#]/, 1)[0].endsWith(segmentExtension),
+  );
+  if (!mediaSegments.length) throw Error("OUTPUT_VERIFICATION_FAILED");
+
+  const directory = playlistKey.slice(0, playlistKey.lastIndexOf("/") + 1);
+  for (const reference of references) {
+    const clean = reference.split(/[?#]/, 1)[0];
+    if (
+      !clean ||
+      clean.startsWith("/") ||
+      /^[a-z][a-z0-9+.-]*:/i.test(clean) ||
+      clean.split("/").includes("..") ||
+      !/^[A-Za-z0-9._/-]+$/.test(clean) ||
+      ![".ts", ".m4s", ".mp4"].some((ext) => clean.endsWith(ext))
+    )
+      throw Error("OUTPUT_VERIFICATION_FAILED");
+    const key = directory + clean;
+    if (!(await storage.exists(key)) || (await storage.size(key)) <= 0)
+      throw Error("OUTPUT_MISSING");
+  }
+}
+
 async function uploadDirectory(local: string, prefix: string) {
   let bytes = 0;
   for (const name of await readdir(local)) {
@@ -440,6 +488,28 @@ export async function mediaJob(job: Job) {
       for (const key of required)
         if (!(await storage.exists(v.output_prefix + key)))
           throw Error("OUTPUT_MISSING");
+
+      for (const rendition of v.renditions as Array<{ name: string }>) {
+        await verifyStoredMediaPlaylist(
+          v.output_prefix + `hls/${rendition.name}/index.m3u8`,
+          ".ts",
+        );
+        await verifyStoredMediaPlaylist(
+          v.output_prefix + `hls/cmaf/${rendition.name}/index.m3u8`,
+          ".m4s",
+        );
+      }
+      for (let ordinal = 1; ordinal <= audioTrackCount; ordinal++) {
+        await verifyStoredMediaPlaylist(
+          v.output_prefix + `hls/audio/track-${ordinal}/index.m3u8`,
+          ".ts",
+        );
+        await verifyStoredMediaPlaylist(
+          v.output_prefix + `hls/cmaf/audio/track-${ordinal}/index.m3u8`,
+          ".m4s",
+        );
+      }
+
       await transaction(async (c) => {
         const r = await c.query(
           "UPDATE videos SET status='ready',updated_at=now(),error_code=NULL WHERE id=$1 AND deleted_at IS NULL RETURNING id",
