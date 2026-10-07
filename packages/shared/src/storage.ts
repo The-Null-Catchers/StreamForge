@@ -16,6 +16,12 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Readable } from "node:stream";
 import { config } from "../../config/src/index.js";
 
+export type StoredObject = {
+  key: string;
+  size: number;
+  lastModified?: Date;
+};
+
 export interface ObjectStorage {
   put(
     key: string,
@@ -27,6 +33,7 @@ export interface ObjectStorage {
   delete(key: string): Promise<void>;
   exists(key: string): Promise<boolean>;
   getSignedUrl(key: string, expires?: number): Promise<string>;
+  listPrefix(prefix: string): Promise<StoredObject[]>;
 }
 
 export type MultipartPart = { partNumber: number; etag: string };
@@ -97,6 +104,30 @@ export class S3Storage implements ObjectStorage {
       new GetObjectCommand({ Bucket: config.S3_BUCKET, Key: key }),
       { expiresIn: expires },
     );
+  }
+
+  async listPrefix(prefix: string) {
+    const objects: StoredObject[] = [];
+    let token: string | undefined;
+    do {
+      const r = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: config.S3_BUCKET,
+          Prefix: prefix,
+          ContinuationToken: token,
+        }),
+      );
+      for (const object of r.Contents ?? []) {
+        if (!object.Key) continue;
+        objects.push({
+          key: object.Key,
+          size: Number(object.Size ?? 0),
+          ...(object.LastModified ? { lastModified: object.LastModified } : {}),
+        });
+      }
+      token = r.NextContinuationToken;
+    } while (token);
+    return objects;
   }
 
   async createMultipart(key: string, type: string) {
