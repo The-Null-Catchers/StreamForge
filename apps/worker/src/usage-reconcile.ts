@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { db, transaction } from "../../../packages/shared/src/db.js";
 import { storage } from "../../../packages/shared/src/storage.js";
 
+let objectStoreCursor: string | null = null;
+
 export async function reconcileOutputAccounting() {
   const result = await db.query(
     `WITH expected AS (
@@ -21,7 +23,10 @@ export async function reconcileOutputAccounting() {
      )
      SELECT count(*)::int AS corrected FROM corrected`,
   );
-  return Number(result.rows[0]?.corrected ?? 0);
+  const ledgerCorrected = Number(result.rows[0]?.corrected ?? 0);
+  const objectStore = await reconcileObjectStoreOutputUsage(objectStoreCursor);
+  objectStoreCursor = objectStore.nextCursor;
+  return ledgerCorrected + objectStore.corrected;
 }
 
 export type ObjectStoreReconcileResult = {
