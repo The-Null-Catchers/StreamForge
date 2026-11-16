@@ -1,0 +1,163 @@
+{
+  "repository": "The-Null-Catchers/StreamForge",
+  "defaultBranch": "main",
+  "baseSHA": "d4b5a32c9f3085bb3ee14c006342c113a46d6e34",
+  "backupTag": "cleanup-backup-2026-11-16",
+  "delete": [
+    {
+      "name": "feat/automatic-transcription",
+      "sha": "6e2728b8acf7c6170170f092ff2a07141eb54282",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/dedicated-worker-pools",
+      "sha": "7bd1eea01c5e7537ed6057a530c61f2cb5d9dbcb",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/embed-domain-restrictions",
+      "sha": "e68d4d42e793652ea4d7fae00b577a1c17d89bb9",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/invite-email-delivery",
+      "sha": "c6c0886d5244578b43e420c2c2472ef4c59f39d7",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/live-to-vod",
+      "sha": "bed1ee70e7581ea27b1c520b09ced1d0d1d8abfa",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/monthly-upload-quota",
+      "sha": "2debb996d0487d2d1a4bfb1e7752853b96d86f55",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/nonce-csp",
+      "sha": "08421b891cd7c028ddc912657d2b31e0acb516e1",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/openapi-sdk",
+      "sha": "cc16c3f61a3277e36d94b6935b014046e16099ed",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/output-storage-quota",
+      "sha": "b9c3890d490efccc84d976f7f348d1f356064153",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/playback-hardening",
+      "sha": "cc16c3f61a3277e36d94b6935b014046e16099ed",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/playback-token-renewal",
+      "sha": "57a1260b38fbf846e6d1c7a55b14321326a6a707",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/processing-compute-quota",
+      "sha": "6d33d9e98be8df04eecc7ed9c992597263c731ec",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/quota-admin-notices",
+      "sha": "aab4c1f1c46a7f47962ac2a0602a77928ab28dde",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/redis-loss-reconciliation",
+      "sha": "012bb4610bbe86e51bcaf04f350f82e6a444cdba",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/stale-temp-janitor",
+      "sha": "2527d4540357b041aae9ab3fafca679e52105f9f",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/thumbnail-sprites-final",
+      "sha": "001888a4c473ccf3241f4c4ecd43ce4b9ff4a981",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/thumbnail-sprites-v2",
+      "sha": "001888a4c473ccf3241f4c4ecd43ce4b9ff4a981",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/thumbnail-sprites-v3",
+      "sha": "001888a4c473ccf3241f4c4ecd43ce4b9ff4a981",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/thumbnail-sprites-v4",
+      "sha": "001888a4c473ccf3241f4c4ecd43ce4b9ff4a981",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/transcoding-profiles",
+      "sha": "34f00bb4c0fed9d05abe1bef8ab623279b8581f7",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/upload-session-controls",
+      "sha": "c45f92690e62606905b497d560bae59ca226b9fc",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/usage-reconciliation",
+      "sha": "3dafbbabce9f9454b9559637f7d41000b7d5d2e0",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/workspace-member-management",
+      "sha": "722ca8bcb4d95b51ff3233d37bb0a1083affca5d",
+      "reason": "ancestor"
+    },
+    {
+      "name": "noop",
+      "sha": "db796cc52f23a0990679018626b5a4ff9814d856",
+      "reason": "ancestor"
+    },
+    {
+      "name": "feat/media-readiness-hardening",
+      "sha": "5dfb0c17d8a563ce21a9d15d85ea48bbb6820ea8",
+      "reason": "equivalent"
+    },
+    {
+      "name": "feat/post-readiness-media-health",
+      "sha": "43b981dc0e1c2957ebb2a5ad398639ebaaca5eb6",
+      "reason": "tree-identical"
+    }
+  ],
+  "status": "Explicitly approved: archive before lease-guarded deletion",
+  "archiveParents": [
+    "6e2728b8acf7c6170170f092ff2a07141eb54282",
+    "7bd1eea01c5e7537ed6057a530c61f2cb5d9dbcb",
+    "e68d4d42e793652ea4d7fae00b577a1c17d89bb9",
+    "c6c0886d5244578b43e420c2c2472ef4c59f39d7",
+    "bed1ee70e7581ea27b1c520b09ced1d0d1d8abfa",
+    "2debb996d0487d2d1a4bfb1e7752853b96d86f55",
+    "08421b891cd7c028ddc912657d2b31e0acb516e1",
+    "cc16c3f61a3277e36d94b6935b014046e16099ed",
+    "b9c3890d490efccc84d976f7f348d1f356064153",
+    "57a1260b38fbf846e6d1c7a55b14321326a6a707",
+    "6d33d9e98be8df04eecc7ed9c992597263c731ec",
+    "aab4c1f1c46a7f47962ac2a0602a77928ab28dde",
+    "012bb4610bbe86e51bcaf04f350f82e6a444cdba",
+    "2527d4540357b041aae9ab3fafca679e52105f9f",
+    "001888a4c473ccf3241f4c4ecd43ce4b9ff4a981",
+    "34f00bb4c0fed9d05abe1bef8ab623279b8581f7",
+    "c45f92690e62606905b497d560bae59ca226b9fc",
+    "3dafbbabce9f9454b9559637f7d41000b7d5d2e0",
+    "722ca8bcb4d95b51ff3233d37bb0a1083affca5d",
+    "db796cc52f23a0990679018626b5a4ff9814d856",
+    "5dfb0c17d8a563ce21a9d15d85ea48bbb6820ea8",
+    "43b981dc0e1c2957ebb2a5ad398639ebaaca5eb6"
+  ]
+}
