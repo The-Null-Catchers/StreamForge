@@ -49,7 +49,10 @@ async function verifyStoredMediaPlaylist(
   playlistKey: string,
   segmentExtension: ".ts" | ".m4s",
 ) {
-  if (!(await storage.exists(playlistKey)) || (await storage.size(playlistKey)) <= 0)
+  if (
+    !(await storage.exists(playlistKey)) ||
+    (await storage.size(playlistKey)) <= 0
+  )
     throw Error("MEDIA_INTEGRITY_FAILED");
   const text = await storageText(playlistKey);
   if (!text.startsWith("#EXTM3U") || !text.includes("#EXT-X-ENDLIST"))
@@ -62,7 +65,8 @@ async function verifyStoredMediaPlaylist(
     const line = rawLine.trim();
     if (!line) continue;
     if (!line.startsWith("#")) references.add(line);
-    for (const match of line.matchAll(/URI="([^"]+)"/g)) references.add(match[1]);
+    for (const match of line.matchAll(/URI="([^"]+)"/g))
+      references.add(match[1]);
   }
   const segments = [...references].filter((reference) =>
     reference.split(/[?#]/, 1)[0].endsWith(segmentExtension),
@@ -87,7 +91,10 @@ export async function verifyReadyVideoMedia(video: VideoRow) {
   ];
   for (const key of required) {
     const objectKey = video.output_prefix + key;
-    if (!(await storage.exists(objectKey)) || (await storage.size(objectKey)) <= 0)
+    if (
+      !(await storage.exists(objectKey)) ||
+      (await storage.size(objectKey)) <= 0
+    )
       throw Error("MEDIA_INTEGRITY_FAILED");
   }
 
@@ -137,7 +144,14 @@ export async function scanReadyVideoMediaHealth(
   for (const video of rows) {
     try {
       await verifyReadyVideoMedia(video);
-    } catch {
+    } catch (error) {
+      // Storage timeouts, authorization failures and outages are retryable;
+      // they are not evidence that a ready video is corrupt.
+      if (
+        !(error instanceof Error) ||
+        error.message !== "MEDIA_INTEGRITY_FAILED"
+      )
+        throw error;
       unhealthy++;
       await transaction(async (c) => {
         const changed = await c.query(
@@ -148,7 +162,12 @@ export async function scanReadyVideoMediaHealth(
           [video.id],
         );
         if (!changed.rowCount) return;
-        await event(c, video.workspace_id, video.id, "video.media.integrity.failed");
+        await event(
+          c,
+          video.workspace_id,
+          video.id,
+          "video.media.integrity.failed",
+        );
         await c.query(
           "INSERT INTO notifications(workspace_id,video_id,message) VALUES($1,$2,$3)",
           [
@@ -164,6 +183,6 @@ export async function scanReadyVideoMediaHealth(
   return {
     checked: rows.length,
     unhealthy,
-    cursor: rows.length < limit ? null : rows.at(-1)?.id ?? null,
+    cursor: rows.length < limit ? null : (rows.at(-1)?.id ?? null),
   };
 }
