@@ -67,19 +67,19 @@ export type ReviewComment = {
 export class StreamForge {
   constructor(private options: { apiKey: string; baseUrl?: string }) {}
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const headers = new Headers(
+      init.body !== undefined ? { "Content-Type": "application/json" } : {},
+    );
+    headers.set("Authorization", `Bearer ${this.options.apiKey}`);
+    new Headers(init.headers).forEach((value, name) => headers.set(name, value));
     const r = await fetch(
       `${this.options.baseUrl ?? "http://localhost:8080"}/api/v1${path}`,
       {
         ...init,
-        headers: {
-          ...(init.body !== undefined
-            ? { "Content-Type": "application/json" }
-            : {}),
-          Authorization: `Bearer ${this.options.apiKey}`,
-          ...init.headers,
-        },
+        headers,
       },
     );
+    if (r.status === 204) return undefined as T;
     const b = await r.json();
     if (!r.ok) throw new Error(`${b.error?.code}: ${b.error?.message}`);
     return b as T;
