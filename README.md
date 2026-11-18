@@ -85,3 +85,7 @@ Migrations are ordered, transactional SQL with a PostgreSQL advisory lock and ap
 ## Documentation
 
 [Architecture](docs/architecture.md) · [Media pipeline](docs/media-pipeline.md) · [Uploads](docs/upload-system.md) · [Storage](docs/storage.md) · [HLS](docs/hls.md) · [Security](docs/security.md) · [API](docs/api.md) · [Webhooks](docs/webhooks.md) · [Deployment](docs/deployment.md) · [Scaling](docs/scaling.md) · [Status](docs/status.md)
+
+## Portfolio roadmap
+
+See the [repository-specific portfolio roadmap](PORTFOLIO_ROADMAP.md) for priorities, acceptance criteria, demo scope, and release evidence. This complements the existing implementation and status documentation.
