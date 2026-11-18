@@ -1,44 +1,52 @@
-# StreamForge — خطة البورتفيليو
+# StreamForge portfolio roadmap
 
-مرجع التقييم الأساسي: 17 نوفمبر 2026. تحديث نشر الخطة داخل المستودع: 18 نوفمبر 2026.
+Baseline reviewed on November 17, 2026. Repository roadmap published on November 18, 2026.
 
-الخطة خاصة بهذا المستودع، ومستخلصة من خطة Null Catchers المشتركة. وصف «الموجود الموثق» يعكس المراجعة بتاريخها؛ تحقّق من الكود ووثائق الحالة الحالية قبل إنشاء مهمة جديدة. لا تعِد تنفيذ ميزة موجودة، ولا تعتبر وجود تعريف CI دليلًا على نجاح تشغيله.
+This roadmap applies to this repository and follows the shared Null Catchers portfolio plan. Verify the documented state against the current code and runs before starting work.
 
-**تقدير شريحة العرض الأولى:** 30–50 ساعة. التقدير تخطيطي لمطور يعرف المشروع، ويستثني انتظار حسابات المتاجر والمراجعات الخارجية وتجهيز بيئة الهدف. لا يغطي جميع بنود P2.
+**Estimated initial demo effort** 30–50 hours for a developer familiar with the project. The estimate excludes external reviews, store accounts, target environment setup, and later milestones.
 
-## الأولويات الخاصة بالمشروع
+## Project priorities
 
-**الموجود الموثق:** رفع قابل للاستئناف، direct multipart وtus، FFmpeg وHLS/CMAF، audio tracks وsubtitles وتحليلات. status أوسع من ملخص README؛ لا تعِد بناء هذه المزايا. المتبقي يتضمن browser E2E شاملًا وتحقق Flutter ومزودات خارجية.
+**Documented state** The project implements resumable uploads, direct multipart and tus, FFmpeg, HLS/CMAF, audio tracks, subtitles, and analytics. Full browser coverage, Flutter verification, and external providers remain milestones.
 
-**P0 — نسخة العرض:** أضف رحلة متصفح كاملة للتسجيل والتحقق من البريد والرفع المباشر؛ اقطع الاتصال ثم استأنف إلى ready وشغّل الفيديو. استخدم فيديو اختبار مولدًا أو مملوكًا، وقارن hash الأصل ومجموعات مخرجات فعلية. اختبر CORS/ETag في مخزن الهدف.
+**P0 — Demo** Verify signup, email verification, direct upload recovery, and playback with a generated or owned test video. Check uploaded hashes, output media, CORS, and ETag on the target store.
 
-**P1 — إثبات سلامة التشغيل:** غيّر الجودة والصوت والترجمة داخل اللاعب، ثم اختبر انتهاء token وتجديده وإبطال الوصول بعد الحذف. أضف webhook إلى مستقبل HTTPS تجريبي إذا توفر، وسجل retry بعد فشل عابر. اعرض processing time وstartup/buffering تحت إعداد معلوم.
+**P1 — Validation and depth** Change quality, audio, and subtitles. Verify token renewal and revocation after deletion. If a test HTTPS hook receiver is available, measure retry after a transient failure. Report processing and playback startup under a known setup.
 
-**P2 — لاحقًا:** إصلاح تلقائي بعد integrity quarantine أو mobile parity، ثم تحسين live streaming. لا تجعل اختبارات RTMP/SRT الكاملة شرطًا لعرض VOD أول.
+**P2 — Later** Consider integrity-quarantine recovery, mobile parity, and live streaming. Full RTMP/SRT support is outside the first VOD demo.
 
-**معيار الإنجاز:** لا تضاعف للرفع بعد retry، لا ready مع segment ناقص، التشغيل بعد تجديد authorization ينجح، والحذف يبطل الوصول ضمن السلوك المعلن.
+**Acceptance criteria** Retry creates one upload, readiness requires all segments, authorized playback resumes after renewal, and deletion revokes access according to the published contract.
 
-**الديمو:** upload → قطع الشبكة → resume → transcoding → تبديل جودة/ترجمة → webhook. **الأدلة:** [Capability Matrix](https://github.com/The-Null-Catchers/StreamForge/blob/main/docs/status.md)، [Uploads](https://github.com/The-Null-Catchers/StreamForge/blob/main/docs/upload-system.md).
+**Demo scenario** Upload → disconnect → resume → transcode → change quality or subtitles → webhook. [Capability Matrix](https://github.com/The-Null-Catchers/StreamForge/blob/main/docs/status.md), [Uploads](https://github.com/The-Null-Catchers/StreamForge/blob/main/docs/upload-system.md).
 
-## بوابة قبول نسخة البورتفيليو
+## Next milestones
 
-- [ ] يستطيع شخص آخر تشغيل المسار الرئيسي من checkout نظيف، باتباع README، دون أسرار شخصية.
-- [ ] توجد قصة واحدة مكتملة: مستخدم محدد، مشكلة محددة، ومسار بداية إلى نتيجة محفوظة.
-- [ ] ينجح اختبار للمسار الرئيسي وحالة فشل مهمة، وتُختبر حدود الصلاحيات حيث توجد حسابات متعددة.
-- [ ] توجد بيانات عرض اصطناعية معلنة، قابلة لإعادة الإنشاء؛ ولا توجد بيانات عملاء أو أسرار في اللقطات.
-- [ ] توجد 4–6 لقطات حقيقية أو العدد الملائم للأداة، وفيديو 60–120 ثانية، وروابط تعمل. تُلتقط الأدلة من إصدار معروف.
-- [ ] README يوضح المزايا الفعلية، طريقة التشغيل، الرسم المعماري، القيود، وروابط الاختبارات والديمو.
-- [ ] Case study قصيرة تشرح قرارين هندسيين، بديلًا جرى استبعاده ولماذا، وفشلًا حقيقيًا وكيف يعالجه النظام.
-- [ ] صفحة Release تسجل SHA وCI والمتطلبات والقيود. لا تُنشر أرقام أداء دون workload وعتاد وطريقة قياس.
-- [ ] حُسمت سياسة الترخيص ونسب المساهمات قبل التوزيع؛ لا نختار ترخيصًا تلقائيًا لجميع المستودعات.
+The [upload guide](docs/upload-system.md) and [feature status](docs/status.md) document direct upload and file size and hash checks.
 
-الديمو المستضاف مفيد وليس شرطًا لكل أداة. أدوات تنفيذ الكود وإدارة الخوادم والأسرار يمكن عرضها بفيديو وبيئة معزولة وتجربة محلية قابلة للإعادة. لا تفتح تنفيذًا عامًا غير محدود لمجرد وجود رابط بورتفيليو.
+1. [ ] Use a generated video, disconnect after the first part uploads, and resume in the same browser. Match the original size and hash.
+2. [ ] Check CORS and ETag in the test store. Wait for readiness and verify playback starts and shows the right duration.
+3. [ ] Record the run with browser, storage target, and SHA. Document whether target-provider verification has run.
 
-## التنفيذ والمتابعة
+## Portfolio acceptance checklist
 
-- حوّل P0 إلى مهام صغيرة، لكل منها سلوك متوقع ومعيار قبول واختبار مناسب.
-- ابدأ بتأكيد الموجود؛ عدّل هذه الخطة عندما يغلق بند بدليل مرتبط بcommit أو PR.
-- سجّل مصدر بيانات الديمو، والـSHA الذي التُقطت منه الأدلة، وحدود التجربة الفعلية.
-- راجع الفرق النهائي وانتظر نجاح الفحوص المطلوبة لنفس SHA قبل الدمج، مع احترام حماية الفرع.
-- إذا كان التعديل وثائق فقط ولا يوجد فحص ينطبق عليه، سجّل التحقق من محتواها وروابطها؛ لا تسجل اختبارات تشغيل لم تُنفّذ.
-- لا تُنشر أرقام أداء أو ادعاءات أمان أو جاهزية إنتاج بلا دليل مناسب.
+- [ ] Another person can reproduce the primary workflow from a clean checkout using the README and test credentials or fixtures.
+- [ ] The demo tells one complete story with a defined user, problem, and saved result.
+- [ ] Tests cover the main flow, an important failure, and access boundaries when multiple accounts are involved.
+- [ ] Demo data is labeled synthetic and reproducible. Review screenshots and recordings for secrets and customer data.
+- [ ] Include four to six real screenshots where appropriate, a 60–120 second recording, and working links. Identify the revision used for capture.
+- [ ] The README describes implemented capabilities, setup, architecture, limits, tests, and the demo.
+- [ ] A short case study explains two engineering decisions, a considered alternative, and how the system handles an actual failure.
+- [ ] Release evidence records the commit SHA, CI, prerequisites, and limits. Performance data includes workload, hardware, and method.
+- [ ] Licensing and contributor attribution are settled before distribution. Choose the license for each repository individually.
+
+A hosted demo is optional. Code execution, server administration, and secret management can be demonstrated through a recording and a reproducible isolated environment. Keep public demo access scoped to the activities it needs.
+
+## Implementation and follow-up
+
+- Break P0 into tasks with expected behavior, acceptance criteria, and a suitable test.
+- Verify existing functionality first. Update this plan when evidence tied to a commit or PR closes a milestone.
+- Record the fixture source, the revision used for evidence, and the tested limits.
+- Review the final diff and verify required checks for its exact SHA before merging. Follow branch protection.
+- For documentation-only changes with no applicable workflow, verify content and links and record the checks actually performed.
+- Tie performance, security, and readiness claims to supporting evidence.
