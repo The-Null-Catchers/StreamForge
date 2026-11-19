@@ -16,7 +16,7 @@ Signed bytes: `timestamp + '.' + exact raw JSON body`. Verify against the **raw*
 
 Payload: `{id,event,videoId,workspaceId}`. It does not include private media URLs.
 
-Delivery timeout is ten seconds; three attempts with exponential backoff. Only 2xx is success. Redirects are failures. PostgreSQL history stores response status and all attempted deliveries, including network failures. Network failures have no HTTP response status. Manual resend creates a new delivery ID with the same event payload. Disabled endpoints do not deliver queued events.
+Delivery timeout is ten seconds; three attempts with exponential backoff. Only 2xx is success. Redirects are failures. Delivery history shows the attempt count and latest outcome for each delivery ID. The latest HTTP status is cleared at the start of a new attempt. A network failure leaves the status code empty. Manual resend creates a new delivery ID with the same event payload. Disabled endpoints do not deliver queued events.
 
 ```mermaid
 flowchart TD
