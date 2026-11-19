@@ -22,6 +22,14 @@ test("direct upload API creates, signs, completes and cancels multipart uploads"
   assert.match(source, /abortMultipart/);
 });
 
+test("direct upload completion checks part integrity and rejects incomplete uploads", async () => {
+  const source = await readFile("apps/api/src/uploads.ts", "utf8");
+  assert.match(source, /MULTIPART_PARTS_INCOMPLETE/);
+  assert.match(source, /partNumberBase: 1/);
+  assert.match(source, /\/direct\/complete/);
+  assert.match(source, /abortMultipart/);
+});
+
 test("direct uploads keep end-to-end SHA integrity through media probe", async () => {
   const migration = await readFile(
     "infra/migrations/025_direct_upload_pipeline_bridge.sql",
