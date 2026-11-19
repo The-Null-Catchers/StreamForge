@@ -1,11 +1,8 @@
-import { lookup } from "node:dns/promises";
 import https from "node:https";
 import { db } from "../../../packages/shared/src/db.js";
 import { config } from "../../../packages/config/src/index.js";
-import {
-  signature,
-  publicAddress,
-} from "../../../packages/shared/src/security.js";
+import { signature } from "../../../packages/shared/src/security.js";
+import { resolveWebhookDestination } from "./webhook-destination.js";
 export async function deliver(deliveryId: string) {
   const r = await db.query(
     "SELECT d.*,w.url,w.secret,w.enabled FROM webhook_deliveries d JOIN webhooks w ON w.id=d.webhook_id WHERE d.id=$1",
@@ -19,15 +16,10 @@ export async function deliver(deliveryId: string) {
   );
   try {
     const url = new URL(d.url);
-    if (
-      url.protocol !== "https:" ||
-      !config.WEBHOOK_ALLOWED_HOSTS.split(",").includes(url.hostname)
-    )
-      throw Error("WEBHOOK_HOST_NOT_ALLOWED");
-    const addresses = await lookup(url.hostname, { all: true });
-    if (!addresses.length || addresses.some((a) => !publicAddress(a.address)))
-      throw Error("WEBHOOK_PRIVATE_ADDRESS");
-    const pinned = addresses[0];
+    const pinned = await resolveWebhookDestination(
+      url,
+      config.WEBHOOK_ALLOWED_HOSTS.split(","),
+    );
     const timestamp = String(Math.floor(Date.now() / 1000));
     const body = JSON.stringify({ id: d.id, ...d.payload });
     const status = await new Promise<number>((resolve, reject) => {
